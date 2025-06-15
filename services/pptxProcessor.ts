@@ -649,7 +649,7 @@ class PPTXProcessor {
   }
 
   // Legacy validation method (kept for compatibility)
-  validatePPTXFile(file: File): boolean {
+  validatePPTXFileLegacy(file: File): boolean {
     const validTypes = [
       'application/vnd.openxmlformats-officedocument.presentationml.presentation',
       'application/vnd.ms-powerpoint'
