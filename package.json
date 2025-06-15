@@ -26,6 +26,7 @@
     "fix-all-imports": "chmod +x fix-all-imports.sh && ./fix-all-imports.sh",
     "fix-final": "chmod +x fix-final.sh && ./fix-final.sh",
     "fix-browser": "chmod +x fix-browser.sh && ./fix-browser.sh",
+    "fix-versioned-imports": "chmod +x fix-versioned-imports.sh && ./fix-versioned-imports.sh",
     "deploy": "npm run build && netlify deploy --prod --dir=dist",
     "test": "echo 'No tests configured' && exit 0"
   },
