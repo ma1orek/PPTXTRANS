@@ -742,7 +742,7 @@ export default function App() {
         </div>
       </div>
 
-      <style jsx>{`
+      <style>{`
         @keyframes success-glow {
           0%, 100% { 
             opacity: 0.75;

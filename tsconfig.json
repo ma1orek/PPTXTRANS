@@ -32,14 +32,12 @@
       "@/*": ["./src/*"],
       "@/components/*": ["./components/*"],
       "@/hooks/*": ["./hooks/*"],  
-  
       "@/services/*": ["./services/*"],
       "@/styles/*": ["./styles/*"]
     },
 
-    /* JSZip and other library support */
-    "types": ["vite/client"],
-    "moduleDetection": "force"
+    /* Include Node types for process.env */
+    "types": ["vite/client", "node"]
   },
   "include": [
     "src/**/*",

@@ -2,7 +2,7 @@
 // Compatible with Tailwind CSS v3.4+ and Vite
 export default {
   plugins: {
-    '@tailwindcss/postcss': {},
+    tailwindcss: {},
     autoprefixer: {},
   },
 };
