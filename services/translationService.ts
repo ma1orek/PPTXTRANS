@@ -903,7 +903,7 @@ class TranslationService {
     return this.activeJobs.get(jobId) || null;
   }
 
-  // Remove completed job and cleanup REAL files
+  // Remove completed job and cleanup REAL files  
   removeJob(jobId: string): void {
     // Cleanup stored REAL files
     const jobFiles = Array.from(this.generatedFiles.keys()).filter(fileId => fileId.includes(jobId));

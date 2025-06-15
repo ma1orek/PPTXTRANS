@@ -7,70 +7,32 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./"),
-    },
-  },
-  define: {
-    global: 'globalThis',
-  },
-  optimizeDeps: {
-    exclude: [
-      // Exclude Node.js-only packages from browser bundle
-      'googleapis',
-      'google-auth-library',
-      'googleapis-common',
-      'gaxios',
-      'gtoken',
-      'jszip',
-      'xml2js',
-      'pptxgenjs'
-    ]
+      '@': path.resolve(__dirname, './src'),
+      '@/components': path.resolve(__dirname, './components'),
+      '@/hooks': path.resolve(__dirname, './hooks'),  
+      '@/services': path.resolve(__dirname, './services'),
+      '@/styles': path.resolve(__dirname, './styles')
+    }
   },
   build: {
+    target: 'esnext',
+    minify: 'terser',
+    sourcemap: false,
     rollupOptions: {
-      external: [
-        // Externalize Node.js-only packages
-        'googleapis',
-        'google-auth-library',
-        'googleapis-common',
-        'gaxios', 
-        'gtoken',
-        'jszip',
-        'xml2js',
-        'pptxgenjs',
-        'fs',
-        'path',
-        'os',
-        'https',
-        'http',
-        'url',
-        'stream',
-        'util',
-        'events',
-        'child_process',
-        'timers',
-        'querystring'
-      ],
       output: {
         manualChunks: {
-          vendor: ['react', 'react-dom'],
-          ui: ['lucide-react', '@radix-ui/react-slot', '@radix-ui/react-select']
+          'react-vendor': ['react', 'react-dom'],
+          'ui-vendor': ['lucide-react', '@radix-ui/react-select', '@radix-ui/react-button'],
+          'jszip-vendor': ['jszip']
         }
-      }
-    },
-    target: 'es2020',
-    sourcemap: false,
-    minify: 'terser',
-    terserOptions: {
-      compress: {
-        drop_console: true,
-        drop_debugger: true
       }
     }
   },
+  optimizeDeps: {
+    include: ['jszip', 'react', 'react-dom']
+  },
   server: {
-    fs: {
-      strict: false
-    }
+    port: 3000,
+    host: true
   }
 })
