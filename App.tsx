@@ -248,16 +248,20 @@ export default function App() {
         <div className="text-center mb-12">
           <div className="flex justify-end mb-3">
             <Select value={currentLanguage} onValueChange={changeLanguage}>
-              <SelectTrigger className="w-36 bg-white/5 backdrop-blur-sm border-white/10">
-                <SelectValue />
+              <SelectTrigger className="w-36 bg-white/5 backdrop-blur-sm border-white/10 text-white">
+                <SelectValue className="text-white" />
               </SelectTrigger>
-              <SelectContent className="bg-gray-900 border-gray-700">
+              <SelectContent className="select-content bg-gray-900/95 backdrop-blur-md border-gray-700">
                 {UI_LANGUAGES.map(lang => (
-                  <SelectItem key={lang.code} value={lang.code} className="text-white hover:bg-gray-800">
-                    <span className="flex items-center gap-2">
+                  <SelectItem 
+                    key={lang.code} 
+                    value={lang.code} 
+                    className="select-item text-white hover:bg-white/10 focus:bg-white/15 cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2">
                       <span>{lang.flag}</span>
                       <span>{lang.name}</span>
-                    </span>
+                    </div>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -268,7 +272,7 @@ export default function App() {
             <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center backdrop-blur-sm border border-white/10 shadow-2xl">
               <Globe className="w-5 h-5" />
             </div>
-            <h1 className="text-4xl font-serif bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">
+            <h1 className="text-4xl font-serif bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent leading-tight">
               PPTX Translator Pro
             </h1>
           </div>

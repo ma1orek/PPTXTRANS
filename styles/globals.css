@@ -142,10 +142,16 @@
 @layer base {
   h1 {
     @apply scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl;
+    /* Remove any potential underline */
+    text-decoration: none;
+    border-bottom: none;
   }
 
   h2 {
-    @apply scroll-m-20 border-b pb-2 text-3xl font-semibold tracking-tight first:mt-0;
+    @apply scroll-m-20 text-3xl font-semibold tracking-tight first:mt-0;
+    /* Remove underline from h2 as well */
+    border-bottom: none;
+    text-decoration: none;
   }
 
   h3 {
@@ -203,6 +209,35 @@
   muted {
     @apply text-sm text-muted-foreground;
   }
+}
+
+/* Fix for Select component styling issues */
+.select-content {
+  background: rgba(17, 24, 39, 0.95) !important;
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.select-item {
+  color: white !important;
+  transition: all 0.2s ease;
+}
+
+.select-item:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+.select-item:focus {
+  background: rgba(255, 255, 255, 0.15) !important;
+}
+
+/* Prevent text duplication in select items */
+.select-item span {
+  display: block;
+}
+
+.select-item span:not(:first-child) {
+  display: none;
 }
 
 /* Performance optimizations */

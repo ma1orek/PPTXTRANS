@@ -3,6 +3,16 @@
   "version": "1.0.0",
   "description": "Professional PowerPoint Translation Tool with Google Drive Integration",
   "type": "module",
+  "browser": {
+    "googleapis": false,
+    "google-auth-library": false,
+    "jszip": false,
+    "xml2js": false,
+    "pptxgenjs": false,
+    "fs": false,
+    "path": false,
+    "os": false
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -15,6 +25,7 @@
     "fix-dependencies": "chmod +x fix-dependencies.sh && ./fix-dependencies.sh",
     "fix-all-imports": "chmod +x fix-all-imports.sh && ./fix-all-imports.sh",
     "fix-final": "chmod +x fix-final.sh && ./fix-final.sh",
+    "fix-browser": "chmod +x fix-browser.sh && ./fix-browser.sh",
     "deploy": "npm run build && netlify deploy --prod --dir=dist",
     "test": "echo 'No tests configured' && exit 0"
   },
@@ -82,9 +93,7 @@
     "postcss": "^8.4.39",
     "tailwindcss": "^3.4.6",
     "typescript": "^5.5.3",
-    "vite": "^5.3.4"
-  },
-  "optionalDependencies": {
+    "vite": "^5.3.4",
     "googleapis": "^140.0.1",
     "jszip": "^3.10.1",
     "pptxgenjs": "^3.12.0",

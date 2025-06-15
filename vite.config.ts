@@ -4,115 +4,73 @@ import path from 'path'
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [
-    react()
-  ],
-  
-  // Path resolution
+  plugins: [react()],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
-      '@/components': path.resolve(__dirname, './components'),
-      '@/services': path.resolve(__dirname, './services'),
-      '@/hooks': path.resolve(__dirname, './hooks'),
-      '@/styles': path.resolve(__dirname, './styles'),
+      "@": path.resolve(__dirname, "./"),
     },
   },
-
-  // CSS configuration
-  css: {
-    postcss: './postcss.config.js',
+  define: {
+    global: 'globalThis',
   },
-
-  // Build configuration
+  optimizeDeps: {
+    exclude: [
+      // Exclude Node.js-only packages from browser bundle
+      'googleapis',
+      'google-auth-library',
+      'googleapis-common',
+      'gaxios',
+      'gtoken',
+      'jszip',
+      'xml2js',
+      'pptxgenjs'
+    ]
+  },
   build: {
-    // Output directory
-    outDir: 'dist',
-    
-    // Clean output directory before build
-    emptyOutDir: true,
-    
-    // Generate source maps for debugging
-    sourcemap: false,
-    
-    // Optimize build
-    minify: 'terser',
-    
-    // Chunk size warnings
-    chunkSizeWarningLimit: 1000,
-    
-    // Rollup options
     rollupOptions: {
+      external: [
+        // Externalize Node.js-only packages
+        'googleapis',
+        'google-auth-library',
+        'googleapis-common',
+        'gaxios', 
+        'gtoken',
+        'jszip',
+        'xml2js',
+        'pptxgenjs',
+        'fs',
+        'path',
+        'os',
+        'https',
+        'http',
+        'url',
+        'stream',
+        'util',
+        'events',
+        'child_process',
+        'timers',
+        'querystring'
+      ],
       output: {
-        // Manual chunks for better caching
         manualChunks: {
-          // React core
-          'react-core': ['react', 'react-dom'],
-          
-          // UI components
-          'ui-components': [
-            '@radix-ui/react-select',
-            '@radix-ui/react-dialog',
-            '@radix-ui/react-dropdown-menu',
-            '@radix-ui/react-tooltip',
-            '@radix-ui/react-popover'
-          ],
-          
-          // Icons
-          'icons': ['lucide-react'],
+          vendor: ['react', 'react-dom'],
+          ui: ['lucide-react', '@radix-ui/react-slot', '@radix-ui/react-select']
         }
       }
     },
-    
-    // Terser options for minification
+    target: 'es2020',
+    sourcemap: false,
+    minify: 'terser',
     terserOptions: {
       compress: {
         drop_console: true,
-        drop_debugger: true,
-      },
-    },
+        drop_debugger: true
+      }
+    }
   },
-
-  // Development server
   server: {
-    host: true,
-    port: 5173,
-    open: true,
-    cors: true,
-  },
-
-  // Preview server (for testing builds)
-  preview: {
-    host: true,
-    port: 4173,
-    open: true,
-  },
-
-  // Environment variables
-  define: {
-    __APP_VERSION__: JSON.stringify(process.env.npm_package_version || '1.0.0'),
-    __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
-  },
-
-  // Optimization
-  optimizeDeps: {
-    include: [
-      'react',
-      'react-dom',
-      'lucide-react',
-      '@radix-ui/react-select',
-      '@radix-ui/react-dialog',
-      '@radix-ui/react-dropdown-menu'
-    ],
-    exclude: [
-      // Exclude heavy optional dependencies from optimization
-      'googleapis',
-      'jszip', 
-      'pptxgenjs',
-      'xml2js'
-    ]
-  },
-
-  // Base path (useful for GitHub Pages or subdirectory deployments)
-  base: './',
+    fs: {
+      strict: false
+    }
+  }
 })
