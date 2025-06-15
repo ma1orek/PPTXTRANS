@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Download, Globe, FileText, CheckCircle, Clock, AlertCircle, Languages } from 'lucide-react';
+import { Upload, Download, Globe, FileText, CheckCircle, Clock, AlertCircle, Languages, FileSpreadsheet } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Card } from './components/ui/card';
 import { Progress } from './components/ui/progress';
@@ -23,9 +23,12 @@ type TranslationJob = {
   currentStep?: string;
   results?: TranslationResult[];
   error?: string;
+  sheetId?: string; // Add sheet ID for XLSX download
 };
 
+// Expanded language list - no limits!
 const AVAILABLE_LANGUAGES = [
+  // European Languages
   { code: 'pl', name: 'Polish', flag: '🇵🇱' },
   { code: 'es', name: 'Spanish', flag: '🇪🇸' },
   { code: 'fr', name: 'French', flag: '🇫🇷' },
@@ -33,11 +36,72 @@ const AVAILABLE_LANGUAGES = [
   { code: 'it', name: 'Italian', flag: '🇮🇹' },
   { code: 'pt', name: 'Portuguese', flag: '🇵🇹' },
   { code: 'nl', name: 'Dutch', flag: '🇳🇱' },
+  { code: 'sv', name: 'Swedish', flag: '🇸🇪' },
+  { code: 'no', name: 'Norwegian', flag: '🇳🇴' },
+  { code: 'da', name: 'Danish', flag: '🇩🇰' },
+  { code: 'fi', name: 'Finnish', flag: '🇫🇮' },
+  { code: 'is', name: 'Icelandic', flag: '🇮🇸' },
+  { code: 'cs', name: 'Czech', flag: '🇨🇿' },
+  { code: 'sk', name: 'Slovak', flag: '🇸🇰' },
+  { code: 'hu', name: 'Hungarian', flag: '🇭🇺' },
+  { code: 'ro', name: 'Romanian', flag: '🇷🇴' },
+  { code: 'bg', name: 'Bulgarian', flag: '🇧🇬' },
+  { code: 'hr', name: 'Croatian', flag: '🇭🇷' },
+  { code: 'sl', name: 'Slovenian', flag: '🇸🇮' },
+  { code: 'lt', name: 'Lithuanian', flag: '🇱🇹' },
+  { code: 'lv', name: 'Latvian', flag: '🇱🇻' },
+  { code: 'et', name: 'Estonian', flag: '🇪🇪' },
+  { code: 'mt', name: 'Maltese', flag: '🇲🇹' },
+  { code: 'ga', name: 'Irish', flag: '🇮🇪' },
+  { code: 'cy', name: 'Welsh', flag: '🏴󠁧󠁢󠁷󠁬󠁳󠁿' },
+  { code: 'eu', name: 'Basque', flag: '🇪🇸' },
+  { code: 'ca', name: 'Catalan', flag: '🇪🇸' },
+  { code: 'gl', name: 'Galician', flag: '🇪🇸' },
+  
+  // Slavic Languages
   { code: 'ru', name: 'Russian', flag: '🇷🇺' },
+  { code: 'uk', name: 'Ukrainian', flag: '🇺🇦' },
+  { code: 'be', name: 'Belarusian', flag: '🇧🇾' },
+  { code: 'sr', name: 'Serbian', flag: '🇷🇸' },
+  { code: 'bs', name: 'Bosnian', flag: '🇧🇦' },
+  { code: 'mk', name: 'Macedonian', flag: '🇲🇰' },
+  
+  // Asian Languages
   { code: 'ja', name: 'Japanese', flag: '🇯🇵' },
   { code: 'ko', name: 'Korean', flag: '🇰🇷' },
-  { code: 'zh', name: 'Chinese', flag: '🇨🇳' },
+  { code: 'zh', name: 'Chinese (Simplified)', flag: '🇨🇳' },
+  { code: 'zh-tw', name: 'Chinese (Traditional)', flag: '🇹🇼' },
+  { code: 'hi', name: 'Hindi', flag: '🇮🇳' },
+  { code: 'bn', name: 'Bengali', flag: '🇧🇩' },
+  { code: 'ur', name: 'Urdu', flag: '🇵🇰' },
+  { code: 'pa', name: 'Punjabi', flag: '🇮🇳' },
+  { code: 'gu', name: 'Gujarati', flag: '🇮🇳' },
+  { code: 'ta', name: 'Tamil', flag: '🇮🇳' },
+  { code: 'te', name: 'Telugu', flag: '🇮🇳' },
+  { code: 'kn', name: 'Kannada', flag: '🇮🇳' },
+  { code: 'ml', name: 'Malayalam', flag: '🇮🇳' },
+  { code: 'th', name: 'Thai', flag: '🇹🇭' },
+  { code: 'vi', name: 'Vietnamese', flag: '🇻🇳' },
+  { code: 'id', name: 'Indonesian', flag: '🇮🇩' },
+  { code: 'ms', name: 'Malay', flag: '🇲🇾' },
+  { code: 'tl', name: 'Filipino', flag: '🇵🇭' },
+  
+  // Middle Eastern & African Languages
   { code: 'ar', name: 'Arabic', flag: '🇸🇦' },
+  { code: 'he', name: 'Hebrew', flag: '🇮🇱' },
+  { code: 'fa', name: 'Persian', flag: '🇮🇷' },
+  { code: 'tr', name: 'Turkish', flag: '🇹🇷' },
+  { code: 'az', name: 'Azerbaijani', flag: '🇦🇿' },
+  { code: 'ka', name: 'Georgian', flag: '🇬🇪' },
+  { code: 'hy', name: 'Armenian', flag: '🇦🇲' },
+  { code: 'sw', name: 'Swahili', flag: '🇰🇪' },
+  { code: 'af', name: 'Afrikaans', flag: '🇿🇦' },
+  { code: 'am', name: 'Amharic', flag: '🇪🇹' },
+  
+  // Other Languages
+  { code: 'el', name: 'Greek', flag: '🇬🇷' },
+  { code: 'eo', name: 'Esperanto', flag: '🌍' },
+  { code: 'la', name: 'Latin', flag: '🏛️' }
 ];
 
 const UI_LANGUAGES = [
@@ -84,7 +148,7 @@ export default function App() {
     console.log(`🎯 Starting new translation job for: ${file.name} (${file.size} bytes)`);
     console.log(`🌍 Target languages: ${selectedLanguages.join(', ')}`);
     
-    // Create job (validation happens inside the translation service)
+    // Create job (no more language limit!)
     const newJob: TranslationJob = {
       id: Date.now().toString(),
       fileName: file.name,
@@ -154,7 +218,7 @@ export default function App() {
         error: error instanceof Error ? error.message : 'Unknown error occurred'
       });
       
-      throw error; // Re-throw so the caller can handle it
+      throw error;
     }
   };
 
@@ -178,6 +242,21 @@ export default function App() {
       await translationService.downloadAllFiles(job.results, job.fileName);
     } catch (error) {
       alert(`Failed to download files: ${error}`);
+    }
+  };
+
+  // New function to download XLSX with translations
+  const handleDownloadXLSX = async (job: TranslationJob) => {
+    try {
+      if (job.sheetId) {
+        // Download the Google Sheet as XLSX
+        await translationService.downloadSheet(job.sheetId, `${job.fileName}_translations.xlsx`);
+      } else {
+        // Generate XLSX from job data
+        await translationService.generateXLSX(job, `${job.fileName}_translations.xlsx`);
+      }
+    } catch (error) {
+      alert(`Failed to download XLSX: ${error}`);
     }
   };
 
@@ -302,12 +381,17 @@ export default function App() {
             </Card>
 
             <Card className="p-6 bg-black/40 backdrop-blur-sm border-white/10 border shadow-2xl">
-              <h2 className="text-xl font-serif mb-4 text-white">{t('targetLanguages')}</h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-serif text-white">{t('targetLanguages')}</h2>
+                <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30 px-2 py-1 text-xs">
+                  {AVAILABLE_LANGUAGES.length} Languages Available
+                </Badge>
+              </div>
               <LanguageSelector 
                 languages={AVAILABLE_LANGUAGES}
                 selectedLanguages={selectedLanguages}
                 onSelectionChange={setSelectedLanguages}
-                maxSelection={5}
+                maxSelection={0} // No limit!
                 disabled={isProcessing}
               />
             </Card>
@@ -331,12 +415,28 @@ export default function App() {
               <h2 className="text-xl font-serif mb-4 text-white">{t('translationStatus')}</h2>
               <div className="space-y-4">
                 {jobs.map(job => (
-                  <TranslationProgress 
-                    key={job.id} 
-                    job={job}
-                    onDownload={handleDownload}
-                    onDownloadAll={handleDownloadAll}
-                  />
+                  <div key={job.id} className="relative">
+                    <TranslationProgress 
+                      job={job}
+                      onDownload={handleDownload}
+                      onDownloadAll={handleDownloadAll}
+                    />
+                    
+                    {/* Add XLSX Download Button */}
+                    {job.status === 'completed' && (
+                      <div className="mt-3 flex justify-center">
+                        <Button
+                          onClick={() => handleDownloadXLSX(job)}
+                          variant="outline"
+                          size="sm"
+                          className="bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20"
+                        >
+                          <FileSpreadsheet className="w-4 h-4 mr-2" />
+                          Download Translation Sheet (XLSX)
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
             </Card>
@@ -368,20 +468,20 @@ export default function App() {
               {
                 icon: <Globe className="w-5 h-5" />,
                 titleKey: 'multilingualTitle',
-                descriptionKey: 'multilingualDesc'
+                descriptionKey: 'All languages supported - no limits!'
               },
               {
-                icon: <CheckCircle className="w-5 h-5" />,
-                titleKey: 'noLimitsTitle',
-                descriptionKey: 'noLimitsDesc'
+                icon: <FileSpreadsheet className="w-5 h-5" />,
+                titleKey: 'xlsxExportTitle',
+                descriptionKey: 'Download translation sheets for manual editing'
               }
             ].map((feature, index) => (
               <div key={index} className="p-4 bg-black/40 backdrop-blur-sm border-white/10 border rounded-xl shadow-xl hover:bg-black/50 transition-all duration-300">
                 <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center mb-3 shadow-lg">
                   {feature.icon}
                 </div>
-                <h3 className="text-base font-serif text-white mb-1">{t(feature.titleKey)}</h3>
-                <p className="text-gray-400 text-xs">{t(feature.descriptionKey)}</p>
+                <h3 className="text-base font-serif text-white mb-1">{typeof feature.titleKey === 'string' ? t(feature.titleKey) : feature.titleKey}</h3>
+                <p className="text-gray-400 text-xs">{typeof feature.descriptionKey === 'string' ? t(feature.descriptionKey) : feature.descriptionKey}</p>
               </div>
             ))}
           </div>

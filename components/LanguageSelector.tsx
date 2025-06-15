@@ -2,6 +2,7 @@ import React from 'react';
 import { Checkbox } from './ui/checkbox';
 import { Badge } from './ui/badge';
 import { ScrollArea } from './ui/scroll-area';
+import { Button } from './ui/button';
 import { useTranslation } from '../hooks/useTranslation';
 
 interface Language {
@@ -22,7 +23,7 @@ export default function LanguageSelector({
   languages,
   selectedLanguages,
   onSelectionChange,
-  maxSelection = 5,
+  maxSelection = 0, // 0 means no limit
   disabled = false
 }: LanguageSelectorProps) {
   const { t } = useTranslation();
@@ -33,34 +34,94 @@ export default function LanguageSelector({
     if (selectedLanguages.includes(languageCode)) {
       // Remove language
       onSelectionChange(selectedLanguages.filter(code => code !== languageCode));
-    } else if (selectedLanguages.length < maxSelection) {
-      // Add language
+    } else if (maxSelection === 0 || selectedLanguages.length < maxSelection) {
+      // Add language (no limit if maxSelection is 0)
       onSelectionChange([...selectedLanguages, languageCode]);
     }
   };
 
-  const isLanguageDisabled = (languageCode: string) => {
-    return disabled || (!selectedLanguages.includes(languageCode) && selectedLanguages.length >= maxSelection);
+  const handleSelectAll = () => {
+    if (disabled) return;
+    
+    if (selectedLanguages.length === languages.length) {
+      // Deselect all
+      onSelectionChange([]);
+    } else {
+      // Select all
+      onSelectionChange(languages.map(lang => lang.code));
+    }
   };
+
+  const isLanguageDisabled = (languageCode: string) => {
+    return disabled || (maxSelection > 0 && !selectedLanguages.includes(languageCode) && selectedLanguages.length >= maxSelection);
+  };
+
+  const allSelected = selectedLanguages.length === languages.length;
+  const noneSelected = selectedLanguages.length === 0;
 
   return (
     <div className="space-y-4">
-      {/* Selection Info */}
+      {/* Selection Controls */}
       <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-400">
-          Select up to {maxSelection} target languages
-        </p>
+        <div className="flex items-center gap-3">
+          <p className="text-sm text-gray-400">
+            {maxSelection > 0 ? `Select up to ${maxSelection} languages` : 'Select target languages'}
+          </p>
+          {!disabled && (
+            <Button
+              onClick={handleSelectAll}
+              variant="outline"
+              size="sm"
+              className="h-7 px-3 text-xs bg-white/5 border-white/20 hover:bg-white/10 text-white"
+            >
+              {allSelected ? 'Deselect All' : 'Select All'}
+            </Button>
+          )}
+        </div>
+        
         <Badge 
           variant="outline" 
           className={`${
-            selectedLanguages.length >= maxSelection 
+            maxSelection > 0 && selectedLanguages.length >= maxSelection 
               ? 'border-green-500/50 text-green-400' 
-              : 'border-blue-500/50 text-blue-400'
+              : selectedLanguages.length > 0 
+                ? 'border-blue-500/50 text-blue-400'
+                : 'border-gray-500/50 text-gray-400'
           }`}
         >
-          {selectedLanguages.length}/{maxSelection}
+          {maxSelection > 0 ? `${selectedLanguages.length}/${maxSelection}` : `${selectedLanguages.length} selected`}
         </Badge>
       </div>
+
+      {/* Quick Selection Options */}
+      {!disabled && (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            onClick={() => onSelectionChange(['pl', 'es', 'fr', 'de', 'it'])}
+            variant="outline"
+            size="sm"
+            className="h-6 px-2 text-xs bg-white/5 border-white/20 hover:bg-white/10 text-white"
+          >
+            🇪🇺 European
+          </Button>
+          <Button
+            onClick={() => onSelectionChange(['ja', 'ko', 'zh'])}
+            variant="outline"
+            size="sm"
+            className="h-6 px-2 text-xs bg-white/5 border-white/20 hover:bg-white/10 text-white"
+          >
+            🌏 Asian
+          </Button>
+          <Button
+            onClick={() => onSelectionChange(['es', 'pt'])}
+            variant="outline"
+            size="sm"
+            className="h-6 px-2 text-xs bg-white/5 border-white/20 hover:bg-white/10 text-white"
+          >
+            🌎 Latin American
+          </Button>
+        </div>
+      )}
 
       {/* Language Grid with Fixed Height and Scroll */}
       <div className="h-64 border border-white/10 rounded-lg bg-black/20 backdrop-blur-sm">
@@ -126,10 +187,12 @@ export default function LanguageSelector({
               return (
                 <Badge
                   key={languageCode}
-                  className="bg-blue-500/20 text-blue-300 border-blue-500/30 text-xs py-1 px-2"
+                  className="bg-blue-500/20 text-blue-300 border-blue-500/30 text-xs py-1 px-2 cursor-pointer hover:bg-blue-500/30"
+                  onClick={() => handleLanguageToggle(languageCode)}
                 >
                   <span className="mr-1">{language.flag}</span>
                   {language.name}
+                  <span className="ml-1 hover:text-red-300">×</span>
                 </Badge>
               );
             })}
@@ -137,8 +200,8 @@ export default function LanguageSelector({
         </div>
       )}
 
-      {/* Max Selection Warning */}
-      {selectedLanguages.length >= maxSelection && (
+      {/* Selection Warnings */}
+      {maxSelection > 0 && selectedLanguages.length >= maxSelection && (
         <div className="p-2 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
           <p className="text-yellow-400 text-xs">
             Maximum {maxSelection} languages selected. Unselect a language to choose a different one.
@@ -146,11 +209,20 @@ export default function LanguageSelector({
         </div>
       )}
 
-      {/* Disabled State Info */}
+      {/* Processing Info */}
       {disabled && (
         <div className="p-2 bg-gray-500/10 border border-gray-500/30 rounded-lg">
           <p className="text-gray-400 text-xs">
             Language selection is disabled during translation process.
+          </p>
+        </div>
+      )}
+
+      {/* Large Selection Warning */}
+      {selectedLanguages.length > 10 && (
+        <div className="p-2 bg-orange-500/10 border border-orange-500/30 rounded-lg">
+          <p className="text-orange-400 text-xs">
+            ⚠️ {selectedLanguages.length} languages selected. Large translations may take longer to process.
           </p>
         </div>
       )}
