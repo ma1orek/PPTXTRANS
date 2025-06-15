@@ -1,57 +1,72 @@
 #!/bin/bash
+# INSTANT TERSER FIX - Resolves Vite build minification error
+# Run this if you get: "[vite:terser] terser not found" error
 
-# ⚡ INSTANT TERSER FIX - NO DELAYS
-# Immediate fix for missing terser dependency
-
-echo "⚡ INSTANT TERSER FIX - NATYCHMIAST!"
-echo "🎯 Missing terser dependency for Vite minification"
+echo "🔧 INSTANT TERSER FIX - Resolving Vite minification error..."
+echo "   This fixes: [vite:terser] terser not found error"
 echo ""
 
-# Verify terser is in package.json (should be after our update)
-if grep -q '"terser"' package.json; then
-    echo "✅ terser found in package.json"
+# Colors for output
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+
+# Check if we're in the right directory
+if [ ! -f "package.json" ]; then
+    echo -e "${RED}❌ Error: No package.json found. Please run this in your project root directory.${NC}"
+    exit 1
+fi
+
+# Show current terser status
+echo "🔍 Checking current terser installation..."
+if npm list terser --depth=0 &>/dev/null; then
+    echo -e "${GREEN}✅ Terser is already installed${NC}"
 else
-    echo "❌ terser missing - adding now..."
-    # Backup and add terser
-    cp package.json package.json.backup
-    
-    # Add terser to devDependencies before typescript
-    sed -i 's/"typescript": "\^5\.5\.3",/"terser": "^5.36.0",\n    "typescript": "^5.5.3",/' package.json
-    
-    if grep -q '"terser"' package.json; then
-        echo "✅ terser added successfully"
-    else
-        echo "❌ Failed to add terser"
-        exit 1
-    fi
+    echo -e "${YELLOW}⚠️  Terser not found - will install now${NC}"
 fi
 
 echo ""
-echo "🚀 IMMEDIATE DEPLOYMENT..."
+echo "📦 Installing terser dependency..."
 
-# Quick commit and push
-git add package.json
-git commit -m "⚡ INSTANT FIX: Add terser devDependency for Vite minification"
+# Install terser
+npm install --save-dev terser@^5.24.0
 
-if git push origin main; then
-    echo ""
-    echo "🎉 TERSER FIX DEPLOYED!"
-    echo ""
-    echo "📊 What's happening:"
-    echo "  ✅ package.json updated with terser dependency"
-    echo "  ✅ Changes pushed to GitHub"
-    echo "  🚀 Netlify build triggered"
-    echo ""
-    echo "🔧 Netlify will now:"
-    echo "  1. Run npm ci --legacy-peer-deps"
-    echo "  2. Install terser automatically"
-    echo "  3. Build with vite build (terser available)"
-    echo "  4. ✅ SUCCESS!"
-    echo ""
-    echo "⏱️  Expected completion: 2-3 minutes"
-    echo "🎯 This resolves the terser dependency error!"
-    
+if [ $? -eq 0 ]; then
+    echo -e "${GREEN}✅ Terser installed successfully!${NC}"
 else
-    echo "❌ Push failed - try manual:"
-    echo "git push origin main"
+    echo -e "${RED}❌ Failed to install terser${NC}"
+    exit 1
 fi
+
+echo ""
+echo "🧪 Testing build process..."
+
+# Test build
+npm run build:simple
+
+if [ $? -eq 0 ]; then
+    echo ""
+    echo -e "${GREEN}🎉 SUCCESS! Build completed successfully!${NC}"
+    echo ""
+    echo "📋 Summary:"
+    echo "   ✅ Terser minifier installed"
+    echo "   ✅ Production build working"
+    echo "   ✅ Ready for deployment"
+    echo ""
+    echo "🚀 Next steps:"
+    echo "   1. Commit these changes: git add . && git commit -m 'Add terser dependency'"
+    echo "   2. Push to trigger new deployment: git push"
+    echo "   3. Check Netlify build logs for success"
+else
+    echo ""
+    echo -e "${YELLOW}⚠️  Build still has issues. Check error messages above.${NC}"
+    echo ""
+    echo "🔧 Common solutions:"
+    echo "   • Check for TypeScript errors: npm run build"
+    echo "   • Clear node_modules: rm -rf node_modules && npm install"
+    echo "   • Verify all dependencies: npm audit fix"
+fi
+
+echo ""
+echo "🏁 Terser fix complete!"
