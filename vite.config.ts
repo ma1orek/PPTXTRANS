@@ -14,6 +14,14 @@ export default defineConfig({
       '@/styles': path.resolve(__dirname, './styles')
     }
   },
+  css: {
+    postcss: './postcss.config.js',
+    preprocessorOptions: {
+      css: {
+        charset: false
+      }
+    }
+  },
   build: {
     target: 'esnext',
     minify: 'terser',

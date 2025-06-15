@@ -1,8 +1,8 @@
-// PostCSS Configuration for PPTX Translator Pro (ES Module version)
-// Compatible with Tailwind CSS v3.x
+// PostCSS Configuration for PPTX Translator Pro
+// Compatible with Tailwind CSS v3.4+ and Vite
 export default {
   plugins: {
-    tailwindcss: {},
+    '@tailwindcss/postcss': {},
     autoprefixer: {},
   },
 };
