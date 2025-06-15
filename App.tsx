@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Download, Globe, FileText, CheckCircle, Clock, AlertCircle, Languages, FileSpreadsheet } from 'lucide-react';
+import { Upload, Download, Globe, FileText, CheckCircle, Clock, AlertCircle, Languages, FileSpreadsheet, Settings } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Card } from './components/ui/card';
 import { Progress } from './components/ui/progress';
 import { Badge } from './components/ui/badge';
-import { Checkbox } from './components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './components/ui/select';
 import FileUploader from './components/FileUploader';
 import LanguageSelector from './components/LanguageSelector';
@@ -12,6 +11,7 @@ import TranslationProgress from './components/TranslationProgress';
 import ResultsSection from './components/ResultsSection';
 import { useTranslation } from './hooks/useTranslation';
 import { translationService, TranslationResult } from './services/translationService';
+import { googleApiService } from './services/googleApi';
 
 type TranslationJob = {
   id: string;
@@ -23,7 +23,9 @@ type TranslationJob = {
   currentStep?: string;
   results?: TranslationResult[];
   error?: string;
-  sheetId?: string; // Add sheet ID for XLSX download
+  sheetId?: string;
+  importedTranslations?: any;
+  usingImportedTranslations?: boolean;
 };
 
 // Expanded language list - no limits!
@@ -117,6 +119,9 @@ export default function App() {
   const [selectedLanguages, setSelectedLanguages] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [apiStatus, setApiStatus] = useState<any>(null);
+  const [importedTranslations, setImportedTranslations] = useState<any>(null);
+  const [importedFileName, setImportedFileName] = useState<string>('');
   const { t, currentLanguage, changeLanguage } = useTranslation();
   
   // Mouse tracking for animations
@@ -131,11 +136,91 @@ export default function App() {
     window.addEventListener('mousemove', handleMouseMove);
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
+
+  // Check API status on load with better error handling
+  useEffect(() => {
+    const checkApiStatus = async () => {
+      try {
+        console.log('🔍 Checking API status...');
+        
+        // Try to authenticate first
+        await googleApiService.authenticate();
+        
+        // Get credentials status
+        const status = googleApiService.getCredentialsStatus();
+        console.log('📊 API Status:', status);
+        
+        setApiStatus(status);
+      } catch (error) {
+        console.error('❌ Failed to check API status:', error);
+        
+        // Set fallback status
+        setApiStatus({
+          hasEnvironmentKey: false,
+          environmentKeyValid: false,
+          recommendedSetup: 'Error checking API status - running in mock mode',
+          availableEnvVars: [],
+          debugInfo: {
+            error: error instanceof Error ? error.message : 'Unknown error'
+          }
+        });
+      }
+    };
+
+    // Delay the check slightly to ensure environment is ready
+    const timeoutId = setTimeout(checkApiStatus, 100);
+    
+    return () => clearTimeout(timeoutId);
+  }, []);
+
+  // Handle XLSX import (integrated with language selection)
+  const handleXLSXImport = (file: File, translations: any) => {
+    try {
+      console.log('📊 XLSX imported with translations:', translations);
+      
+      // Store imported translations
+      setImportedTranslations(translations);
+      setImportedFileName(file.name);
+      
+      // Auto-detect and select languages from imported data
+      const firstSlideTranslations = Object.values(translations)[0] as Record<string, string>;
+      const importedLanguages = Object.keys(firstSlideTranslations);
+      
+      // Map to our language codes
+      const mappedLanguages = importedLanguages
+        .map(lang => {
+          const found = AVAILABLE_LANGUAGES.find(
+            avail => avail.name.toLowerCase() === lang.toLowerCase() ||
+                     avail.code.toLowerCase() === lang.toLowerCase()
+          );
+          return found?.code;
+        })
+        .filter(Boolean) as string[];
+      
+      if (mappedLanguages.length > 0) {
+        setSelectedLanguages(mappedLanguages);
+        console.log(`✅ Auto-selected ${mappedLanguages.length} languages from XLSX:`, mappedLanguages);
+      } else {
+        console.warn('⚠️ No matching languages found in XLSX, keeping current selection');
+      }
+      
+    } catch (error) {
+      console.error('❌ Error processing XLSX import:', error);
+      alert('Failed to process XLSX file. Please check the format and try again.');
+    }
+  };
+
+  // Clear imported translations
+  const clearImportedTranslations = () => {
+    setImportedTranslations(null);
+    setImportedFileName('');
+    console.log('🗑️ Cleared imported translations');
+  };
   
   const addTranslationJob = async (file: File) => {
     // Check if languages are selected
     if (selectedLanguages.length === 0) {
-      alert(t('selectAtLeastOneLanguage'));
+      alert(t('selectAtLeastOneLanguage') || 'Please select at least one target language.');
       return;
     }
 
@@ -145,10 +230,17 @@ export default function App() {
       return;
     }
 
+    const usingImported = !!importedTranslations;
+    
     console.log(`🎯 Starting new translation job for: ${file.name} (${file.size} bytes)`);
     console.log(`🌍 Target languages: ${selectedLanguages.join(', ')}`);
     
-    // Create job (no more language limit!)
+    if (usingImported) {
+      console.log(`📊 Using imported translations from: ${importedFileName}`);
+      console.log(`📋 Slides with translations: ${Object.keys(importedTranslations).length}`);
+    }
+    
+    // Create job
     const newJob: TranslationJob = {
       id: Date.now().toString(),
       fileName: file.name,
@@ -156,13 +248,15 @@ export default function App() {
       selectedLanguages: [...selectedLanguages],
       status: 'pending',
       progress: 0,
+      importedTranslations: importedTranslations,
+      usingImportedTranslations: usingImported
     };
     
     setJobs(prev => [...prev, newJob]);
     setIsProcessing(true);
     
     try {
-      await startRealTranslation(newJob.id, file, selectedLanguages);
+      await startRealTranslation(newJob.id, file, selectedLanguages, importedTranslations);
     } catch (error) {
       console.error('❌ Translation job failed:', error);
       updateJob(newJob.id, {
@@ -180,7 +274,7 @@ export default function App() {
     ));
   };
 
-  const startRealTranslation = async (jobId: string, file: File, targetLanguages: string[]) => {
+  const startRealTranslation = async (jobId: string, file: File, targetLanguages: string[], importedTranslations?: any) => {
     // Set up progress callback
     translationService.onProgress(jobId, (progress) => {
       updateJob(jobId, {
@@ -198,7 +292,8 @@ export default function App() {
       const results = await translationService.startTranslation(
         jobId,
         file,
-        targetLanguages
+        targetLanguages,
+        importedTranslations
       );
 
       // Update job with results
@@ -245,7 +340,7 @@ export default function App() {
     }
   };
 
-  // New function to download XLSX with translations
+  // Download XLSX with translations
   const handleDownloadXLSX = async (job: TranslationJob) => {
     try {
       if (job.sheetId) {
@@ -325,7 +420,25 @@ export default function App() {
       <div className="relative z-10 container mx-auto px-6 py-8">
         {/* Compact Header */}
         <div className="text-center mb-12">
-          <div className="flex justify-end mb-3">
+          <div className="flex justify-between items-center mb-3">
+            {/* API Status */}
+            <div className="flex items-center gap-2">
+              {apiStatus && (
+                <Badge className={`${
+                  apiStatus.hasEnvironmentKey && apiStatus.environmentKeyValid
+                    ? 'bg-green-500/20 text-green-400 border-green-500/30'
+                    : 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
+                } text-xs`}>
+                  <Settings className="w-3 h-3 mr-1" />
+                  {apiStatus.hasEnvironmentKey && apiStatus.environmentKeyValid 
+                    ? 'APIs Connected' 
+                    : 'Mock Mode'
+                  }
+                </Badge>
+              )}
+            </div>
+
+            {/* Language Selector */}
             <Select value={currentLanguage} onValueChange={changeLanguage}>
               <SelectTrigger className="w-36 bg-white/5 backdrop-blur-sm border-white/10 text-white">
                 <SelectValue className="text-white" />
@@ -356,7 +469,7 @@ export default function App() {
             </h1>
           </div>
           <p className="text-gray-400 text-base max-w-xl mx-auto mb-3">
-            {t('subtitle')}
+            {t('subtitle') || 'Professional PowerPoint translation with unlimited languages and XLSX workflow support'}
           </p>
           
           {/* Updated Badge */}
@@ -368,34 +481,86 @@ export default function App() {
           </div>
         </div>
 
-        {/* Compact Main Content */}
+        {/* Main Content - Simplified Single Interface */}
         <div className="max-w-5xl mx-auto space-y-6">
           {/* Upload & Language Selection */}
           <div className="grid lg:grid-cols-2 gap-6">
+            {/* File Upload */}
             <Card className="p-6 bg-black/40 backdrop-blur-sm border-white/10 border shadow-2xl">
-              <h2 className="text-xl font-serif mb-4 text-white">{t('selectPPTXFile')}</h2>
+              <h2 className="text-xl font-serif mb-4 text-white">{t('selectPPTXFile') || 'Select PPTX File'}</h2>
               <FileUploader 
-                onFileSelect={addTranslationJob}
+                onFileSelect={(file) => addTranslationJob(file)}
                 disabled={isProcessing}
               />
             </Card>
 
+            {/* Language Selection with XLSX Import */}
             <Card className="p-6 bg-black/40 backdrop-blur-sm border-white/10 border shadow-2xl">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-serif text-white">{t('targetLanguages')}</h2>
+                <h2 className="text-xl font-serif text-white">{t('targetLanguages') || 'Target Languages'}</h2>
                 <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30 px-2 py-1 text-xs">
                   {AVAILABLE_LANGUAGES.length} Languages Available
                 </Badge>
               </div>
+              
               <LanguageSelector 
                 languages={AVAILABLE_LANGUAGES}
                 selectedLanguages={selectedLanguages}
                 onSelectionChange={setSelectedLanguages}
                 maxSelection={0} // No limit!
                 disabled={isProcessing}
+                onXLSXImport={handleXLSXImport} // Pass XLSX import handler
               />
             </Card>
           </div>
+
+          {/* XLSX Import Status */}
+          {importedTranslations && (
+            <Card className="p-4 bg-black/40 backdrop-blur-sm border-green-500/20">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <FileSpreadsheet className="w-4 h-4 text-green-400" />
+                  <h3 className="text-green-400">Using Imported Translations</h3>
+                </div>
+                <Button
+                  onClick={clearImportedTranslations}
+                  variant="outline"
+                  size="sm"
+                  className="bg-gray-500/10 border-gray-500/30 text-gray-400 hover:bg-gray-500/20"
+                >
+                  Clear
+                </Button>
+              </div>
+              
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-400">File:</span>
+                  <span className="text-white truncate max-w-48">{importedFileName}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-400">Slides:</span>
+                  <span className="text-white">{Object.keys(importedTranslations).length}</span>
+                </div>
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {selectedLanguages.map(langCode => {
+                    const lang = AVAILABLE_LANGUAGES.find(l => l.code === langCode);
+                    return lang ? (
+                      <Badge key={langCode} className="bg-green-500/20 text-green-300 border-green-500/30 text-xs">
+                        <span className="mr-1">{lang.flag}</span>
+                        {lang.name}
+                      </Badge>
+                    ) : null;
+                  })}
+                </div>
+              </div>
+              
+              <div className="mt-3 p-2 bg-green-500/10 rounded border border-green-500/20">
+                <p className="text-green-300 text-xs">
+                  ✅ Ready to generate PPTX files using your manually corrected translations
+                </p>
+              </div>
+            </Card>
+          )}
 
           {/* Processing Warning */}
           {isProcessing && (
@@ -412,7 +577,7 @@ export default function App() {
           {/* Translation Jobs */}
           {jobs.length > 0 && (
             <Card className="p-6 bg-black/40 backdrop-blur-sm border-white/10 border shadow-2xl">
-              <h2 className="text-xl font-serif mb-4 text-white">{t('translationStatus')}</h2>
+              <h2 className="text-xl font-serif mb-4 text-white">{t('translationStatus') || 'Translation Status'}</h2>
               <div className="space-y-4">
                 {jobs.map(job => (
                   <div key={job.id} className="relative">
@@ -422,8 +587,8 @@ export default function App() {
                       onDownloadAll={handleDownloadAll}
                     />
                     
-                    {/* Add XLSX Download Button */}
-                    {job.status === 'completed' && (
+                    {/* XLSX Download Button */}
+                    {job.status === 'completed' && !job.usingImportedTranslations && (
                       <div className="mt-3 flex justify-center">
                         <Button
                           onClick={() => handleDownloadXLSX(job)}
@@ -434,6 +599,16 @@ export default function App() {
                           <FileSpreadsheet className="w-4 h-4 mr-2" />
                           Download Translation Sheet (XLSX)
                         </Button>
+                      </div>
+                    )}
+                    
+                    {/* Show imported translation info */}
+                    {job.usingImportedTranslations && (
+                      <div className="mt-2 p-2 bg-green-500/10 rounded border border-green-500/20">
+                        <p className="text-green-300 text-xs flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3" />
+                          Generated using imported translations from XLSX file
+                        </p>
                       </div>
                     )}
                   </div>
@@ -447,7 +622,7 @@ export default function App() {
             <div className="relative">
               <div className="absolute -inset-1 bg-gradient-to-r from-green-500/20 via-emerald-500/20 to-cyan-500/20 rounded-xl blur opacity-75 animate-success-glow"></div>
               <Card className="relative p-6 bg-black/40 backdrop-blur-sm border-white/10 border shadow-2xl">
-                <h2 className="text-xl font-serif mb-4 text-white">{t('downloadResults')}</h2>
+                <h2 className="text-xl font-serif mb-4 text-white">{t('downloadResults') || 'Download Results'}</h2>
                 <ResultsSection 
                   jobs={jobs.filter(job => job.status === 'completed')}
                   onDownload={handleDownload}
@@ -457,34 +632,76 @@ export default function App() {
             </div>
           )}
 
-          {/* Compact Features */}
+          {/* Features */}
           <div className="grid md:grid-cols-3 gap-4 mt-8">
             {[
               {
                 icon: <FileText className="w-5 h-5" />,
-                titleKey: 'preserveFormattingTitle',
-                descriptionKey: 'preserveFormattingDesc'
+                title: 'Perfect Formatting',
+                description: 'Preserves original PPTX layout, fonts, and styling'
               },
               {
                 icon: <Globe className="w-5 h-5" />,
-                titleKey: 'multilingualTitle',
-                descriptionKey: 'All languages supported - no limits!'
+                title: 'Unlimited Languages',
+                description: '60+ languages supported with no artificial limits'
               },
               {
                 icon: <FileSpreadsheet className="w-5 h-5" />,
-                titleKey: 'xlsxExportTitle',
-                descriptionKey: 'Download translation sheets for manual editing'
+                title: 'XLSX Workflow',
+                description: 'Import corrected translations for perfect results'
               }
             ].map((feature, index) => (
               <div key={index} className="p-4 bg-black/40 backdrop-blur-sm border-white/10 border rounded-xl shadow-xl hover:bg-black/50 transition-all duration-300">
                 <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center mb-3 shadow-lg">
                   {feature.icon}
                 </div>
-                <h3 className="text-base font-serif text-white mb-1">{typeof feature.titleKey === 'string' ? t(feature.titleKey) : feature.titleKey}</h3>
-                <p className="text-gray-400 text-xs">{typeof feature.descriptionKey === 'string' ? t(feature.descriptionKey) : feature.descriptionKey}</p>
+                <h3 className="text-base font-serif text-white mb-1">{feature.title}</h3>
+                <p className="text-gray-400 text-xs">{feature.description}</p>
               </div>
             ))}
           </div>
+
+          {/* API Status Debug (only show if not configured) */}
+          {apiStatus && !apiStatus.hasEnvironmentKey && (
+            <Card className="p-4 bg-yellow-500/10 border-yellow-500/20">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertCircle className="w-4 h-4 text-yellow-400" />
+                <h3 className="text-yellow-400">Google APIs Not Configured</h3>
+              </div>
+              <p className="text-yellow-300 text-sm mb-3">
+                App is running in mock mode. To enable real Google Translate:
+              </p>
+              <div className="text-xs text-yellow-200 space-y-1">
+                <p>1. Go to <strong>Netlify Dashboard</strong> → Your Site → <strong>Environment Variables</strong></p>
+                <p>2. Add variable: <code className="bg-yellow-500/20 px-1 rounded">VITE_GOOGLE_SERVICE_ACCOUNT_KEY</code></p>
+                <p>3. Value: Your <code className="bg-yellow-500/20 px-1 rounded">sweden-383609-e27db569b1ec.json</code> content (as single line)</p>
+                <p>4. <strong>Deploy site</strong> to activate real Google Translate</p>
+              </div>
+              <p className="text-yellow-300 text-sm mt-2">
+                Current files work perfectly - just add the key to unlock real Google APIs! 🚀
+              </p>
+              
+              {/* Debug Info */}
+              {apiStatus.debugInfo && (
+                <details className="mt-3">
+                  <summary className="text-yellow-400 text-xs cursor-pointer">Debug Information</summary>
+                  <div className="mt-2 text-xs text-yellow-200 space-y-1">
+                    <p>Environment Context:</p>
+                    <ul className="ml-4 space-y-1">
+                      <li>• Has import.meta: {apiStatus.debugInfo.hasImportMeta ? '✅' : '❌'}</li>
+                      <li>• Has import.meta.env: {apiStatus.debugInfo.hasImportMetaEnv ? '✅' : '❌'}</li>
+                      <li>• Has process: {apiStatus.debugInfo.hasProcess ? '✅' : '❌'}</li>
+                      <li>• Has process.env: {apiStatus.debugInfo.hasProcessEnv ? '✅' : '❌'}</li>
+                      <li>• Is client: {apiStatus.debugInfo.isClient ? '✅' : '❌'}</li>
+                    </ul>
+                    {apiStatus.availableEnvVars?.length > 0 && (
+                      <p>Available vars: {apiStatus.availableEnvVars.join(', ')}</p>
+                    )}
+                  </div>
+                </details>
+              )}
+            </Card>
+          )}
         </div>
       </div>
 
