@@ -12,6 +12,7 @@
     "fix-netlify": "chmod +x fix-netlify.sh && ./fix-netlify.sh",
     "fix-postcss": "chmod +x fix-postcss.sh && ./fix-postcss.sh",
     "fix-tailwind": "chmod +x fix-tailwind.sh && ./fix-tailwind.sh",
+    "fix-dependencies": "chmod +x fix-dependencies.sh && ./fix-dependencies.sh",
     "deploy": "npm run build && netlify deploy --prod --dir=dist",
     "test": "echo 'No tests configured' && exit 0"
   },
@@ -48,6 +49,7 @@
     "@radix-ui/react-select": "^2.0.0",
     "@radix-ui/react-separator": "^1.0.3",
     "@radix-ui/react-slider": "^1.1.2",
+    "@radix-ui/react-slot": "^1.1.2",
     "@radix-ui/react-switch": "^1.0.3",
     "@radix-ui/react-tabs": "^1.0.4",
     "@radix-ui/react-toast": "^1.1.5",
