@@ -245,4 +245,4 @@ npm run build
 
 ---
 
-*Bartosz Idzik Enterprise Ecosystem • 2024*# PPTXTRANS
+*Bartosz Idzik Enterprise Ecosystem • 2024*

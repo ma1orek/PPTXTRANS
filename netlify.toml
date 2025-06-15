@@ -1,9 +1,9 @@
-# Netlify Configuration for PPTX Translator Pro
+# Netlify Configuration for PPTX Translator Pro - FIXED VERSION
 # Bartosz Idzik Enterprise Ecosystem
 
 [build]
   # Build command
-  command = "npm run build"
+  command = "npm ci --legacy-peer-deps && npm run build"
   
   # Directory to publish (contains the built app)
   publish = "dist"
@@ -12,6 +12,7 @@
   [build.environment]
     NODE_VERSION = "18"
     NPM_FLAGS = "--legacy-peer-deps"
+    NODE_OPTIONS = "--max-old-space-size=4096"
 
 # Build settings
 [build.processing]
@@ -63,7 +64,7 @@
   to = "/index.html"
   status = 200
 
-# Build hooks (optional - for manual deploys)
+# Build contexts
 [context.production]
   command = "npm ci --legacy-peer-deps && npm run build"
 
@@ -73,11 +74,7 @@
 [context.branch-deploy]
   command = "npm ci --legacy-peer-deps && npm run build"
 
-# Plugin configuration
-[[plugins]]
- package = "@netlify/plugin-nextjs"
-
-# Functions (if needed in the future)
+# Functions directory (if needed in the future)
 [functions]
   directory = "netlify/functions"
 
@@ -86,4 +83,3 @@
   command = "npm run dev"
   port = 5173
   publish = "dist"
-  autoLaunch = true

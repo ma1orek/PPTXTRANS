@@ -5,10 +5,7 @@ import path from 'path'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
-    react({
-      // Enable React Fast Refresh
-      fastRefresh: true,
-    })
+    react()
   ],
   
   // Path resolution
@@ -63,9 +60,6 @@ export default defineConfig({
           
           // Icons
           'icons': ['lucide-react'],
-          
-          // Large optional dependencies
-          'optional-deps': ['googleapis', 'jszip', 'pptxgenjs', 'xml2js']
         }
       }
     },
@@ -96,7 +90,7 @@ export default defineConfig({
 
   // Environment variables
   define: {
-    __APP_VERSION__: JSON.stringify(process.env.npm_package_version),
+    __APP_VERSION__: JSON.stringify(process.env.npm_package_version || '1.0.0'),
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
   },
 
@@ -119,16 +113,6 @@ export default defineConfig({
     ]
   },
 
-  // Worker configuration
-  worker: {
-    format: 'es'
-  },
-
   // Base path (useful for GitHub Pages or subdirectory deployments)
   base: './',
-
-  // Legacy browser support
-  legacy: {
-    buildSsrCjsExternalHeuristics: true
-  }
 })
