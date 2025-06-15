@@ -22,7 +22,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           'react-vendor': ['react', 'react-dom'],
-          'ui-vendor': ['lucide-react', '@radix-ui/react-select', '@radix-ui/react-button'],
+          'ui-vendor': ['lucide-react'],
           'jszip-vendor': ['jszip']
         }
       }
@@ -34,5 +34,9 @@ export default defineConfig({
   server: {
     port: 3000,
     host: true
+  },
+  define: {
+    // Ensure process.env is available if needed
+    'process.env': {}
   }
 })

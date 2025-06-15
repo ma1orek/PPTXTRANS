@@ -31,7 +31,8 @@
     "paths": {
       "@/*": ["./src/*"],
       "@/components/*": ["./components/*"],
-      "@/hooks/*": ["./hooks/*"],
+      "@/hooks/*": ["./hooks/*"],  
+  
       "@/services/*": ["./services/*"],
       "@/styles/*": ["./styles/*"]
     },
@@ -41,9 +42,7 @@
     "moduleDetection": "force"
   },
   "include": [
-    "src",
-    "*.ts",
-    "*.tsx",
+    "src/**/*",
     "components/**/*",
     "hooks/**/*",
     "services/**/*",
@@ -53,6 +52,5 @@
     "node_modules",
     "dist",
     "build"
-  ],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  ]
 }
