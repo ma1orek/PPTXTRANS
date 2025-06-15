@@ -11,6 +11,7 @@
     "fix-git": "chmod +x fix-git.sh && ./fix-git.sh",
     "fix-netlify": "chmod +x fix-netlify.sh && ./fix-netlify.sh",
     "fix-postcss": "chmod +x fix-postcss.sh && ./fix-postcss.sh",
+    "fix-tailwind": "chmod +x fix-tailwind.sh && ./fix-tailwind.sh",
     "deploy": "npm run build && netlify deploy --prod --dir=dist",
     "test": "echo 'No tests configured' && exit 0"
   },
@@ -75,7 +76,7 @@
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.19",
     "postcss": "^8.4.39",
-    "tailwindcss": "^4.0.0-alpha.19",
+    "tailwindcss": "^3.4.6",
     "typescript": "^5.5.3",
     "vite": "^5.3.4"
   },
