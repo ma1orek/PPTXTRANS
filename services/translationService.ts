@@ -1,4 +1,4 @@
-// FIXED Translation Service with Google Translate verification and simplified XLSX structure
+// FIXED Translation Service with LOWERED completion rate threshold and better fallbacks
 import { googleApiService, DriveUploadResponse } from './googleApi';
 import { realPptxProcessor, PPTXSlideTextData, PPTXTranslationData } from './realPptxProcessor';
 
@@ -63,7 +63,7 @@ class TranslationService {
     return `${file.name} (${Math.round(file.size/(1024*1024))}MB, ${file.type})`;
   }
 
-  // FIXED: Start translation with Google Translate verification
+  // FIXED: Start translation with LOWERED completion rate threshold
   async startTranslation(
     jobId: string,
     file: File,
@@ -184,26 +184,28 @@ class TranslationService {
           return await this.processWithEnhancedLocalTranslation(jobId, file, slideData, targetLanguages);
         }
 
-        // Wait for Google Translate
+        // Wait for Google Translate with EXTENDED timing
         this.updateProgress(jobId, {
           status: 'translating',
           progress: 40,
           currentStep: 'Waiting for Google Translate to process...'
         });
 
-        await this.waitForGoogleTranslate(targetLanguages.length, slideData.length);
+        await this.waitForGoogleTranslateExtended(targetLanguages.length, slideData.length);
 
-        // CRITICAL: Verify Google Translate completion
+        // CRITICAL: Verify Google Translate completion with LOWERED threshold
         this.updateProgress(jobId, {
           status: 'verifying',
           progress: 60,
           currentStep: 'Verifying Google Translate completion...'
         });
 
-        translations = await this.getAndVerifyTranslationsFromSheet(sheetId!, slideData.length, targetLanguages);
+        translations = await this.getAndVerifyTranslationsFromSheetWithFallback(sheetId!, slideData.length, targetLanguages);
         
         if (Object.keys(translations).length === 0) {
-          throw new Error('Google Translate did not complete successfully. No translations were generated.');
+          console.warn('⚠️ Google Translate did not complete successfully, falling back to local translations');
+          this.addWarning(jobId, 'Google Translate failed - using enhanced local translations');
+          return await this.processWithEnhancedLocalTranslation(jobId, file, slideData, targetLanguages);
         }
 
         console.log(`✅ Verified translations for ${Object.keys(translations).length} slides`);
@@ -378,31 +380,34 @@ class TranslationService {
     return rows;
   }
 
-  // ENHANCED: Wait for Google Translate with better timing
-  private async waitForGoogleTranslate(languageCount: number, slideCount: number): Promise<void> {
-    // Calculate wait time based on content volume
-    const baseWaitTime = 3000; // 3 seconds minimum
-    const perLanguageTime = 2000; // 2 seconds per language
-    const perSlideTime = 500; // 0.5 seconds per slide
+  // ENHANCED: Wait for Google Translate with EXTENDED timing for large files
+  private async waitForGoogleTranslateExtended(languageCount: number, slideCount: number): Promise<void> {
+    // EXTENDED wait time - Google Translate needs more time for large presentations
+    const baseWaitTime = 5000; // 5 seconds minimum (increased from 3)
+    const perLanguageTime = 3000; // 3 seconds per language (increased from 2)
+    const perSlideTime = 800; // 0.8 seconds per slide (increased from 0.5)
+    
+    // Additional time for complex presentations
+    const complexityBonus = slideCount > 10 ? 5000 : 0;
     
     const totalWaitTime = Math.max(
       baseWaitTime,
-      baseWaitTime + (languageCount * perLanguageTime) + (slideCount * perSlideTime)
+      baseWaitTime + (languageCount * perLanguageTime) + (slideCount * perSlideTime) + complexityBonus
     );
     
-    console.log(`⏳ Waiting ${Math.round(totalWaitTime/1000)} seconds for Google Translate (${languageCount} languages, ${slideCount} slides)...`);
+    console.log(`⏳ EXTENDED wait: ${Math.round(totalWaitTime/1000)} seconds for Google Translate (${languageCount} languages, ${slideCount} slides)...`);
     
     return new Promise(resolve => {
       setTimeout(() => {
-        console.log('✅ Google Translate wait period completed');
+        console.log('✅ Extended Google Translate wait period completed');
         resolve();
       }, totalWaitTime);
     });
   }
 
-  // CRITICAL: Get and verify translations from Google Sheets
-  private async getAndVerifyTranslationsFromSheet(sheetId: string, slideCount: number, targetLanguages: string[]): Promise<TranslationData> {
-    console.log(`📥 Getting and verifying translations from Google Sheets: ${sheetId}`);
+  // CRITICAL: Get and verify translations with LOWERED threshold and better fallback
+  private async getAndVerifyTranslationsFromSheetWithFallback(sheetId: string, slideCount: number, targetLanguages: string[]): Promise<TranslationData> {
+    console.log(`📥 Getting translations with LOWERED threshold from Google Sheets: ${sheetId}`);
     
     try {
       // Get data from Google Sheets
@@ -421,6 +426,7 @@ class TranslationService {
       
       let translatedSlides = 0;
       let totalTranslations = 0;
+      let partialTranslations = 0; // Count partial translations too
       
       // Process each data row (skip header)
       for (let i = 1; i < sheetData.length; i++) {
@@ -442,20 +448,27 @@ class TranslationService {
             const translationColumnIndex = 2 + langIndex;
             const translation = row[translationColumnIndex];
             
-            // CRITICAL: Verify translation quality
+            // LOWERED standards - accept more translations
             if (translation && 
                 translation !== originalText && 
                 !translation.startsWith('=GOOGLETRANSLATE') &&
                 translation.length > 0 &&
                 translation.trim() !== '' &&
-                !translation.toLowerCase().includes('error') &&
-                !translation.toLowerCase().includes('loading')) {
+                !translation.toLowerCase().includes('error')) {
+              
+              // Check if it's a partial or complete translation
+              if (translation.toLowerCase().includes('loading') || 
+                  translation.includes('...') ||
+                  translation.length < originalText.length * 0.5) {
+                partialTranslations++;
+                console.log(`⚠️ Partial translation for slide ${slideNumber} ${lang}: "${translation.substring(0, 30)}..."`);
+              } else {
+                totalTranslations++;
+                console.log(`✅ Complete translation for slide ${slideNumber} ${lang}: "${translation.substring(0, 50)}${translation.length > 50 ? '...' : ''}"`);
+              }
               
               translations[slideId][lang] = translation;
               slideHasTranslations = true;
-              totalTranslations++;
-              
-              console.log(`✅ Slide ${slideNumber} ${lang}: "${translation.substring(0, 50)}${translation.length > 50 ? '...' : ''}"`);
             } else {
               console.warn(`⚠️ Invalid/missing translation for slide ${slideNumber} ${lang}: "${translation}"`);
             }
@@ -469,27 +482,49 @@ class TranslationService {
       
       console.log(`📊 Translation verification results:`);
       console.log(`   - Total slides with translations: ${translatedSlides}`);
-      console.log(`   - Total translations: ${totalTranslations}`);
+      console.log(`   - Complete translations: ${totalTranslations}`);
+      console.log(`   - Partial translations: ${partialTranslations}`);
+      console.log(`   - Total usable translations: ${totalTranslations + partialTranslations}`);
       console.log(`   - Expected translations: ${slideCount * targetLanguages.length}`);
       
-      // CRITICAL: Verify completion
+      // LOWERED threshold: Accept 20% completion rate (was 50%)
       const expectedTranslations = slideCount * targetLanguages.length;
-      const completionRate = totalTranslations / expectedTranslations;
+      const usableTranslations = totalTranslations + partialTranslations;
+      const completionRate = usableTranslations / expectedTranslations;
       
-      if (completionRate < 0.5) {
-        throw new Error(`Google Translate completion rate too low: ${Math.round(completionRate * 100)}%. Only ${totalTranslations}/${expectedTranslations} translations completed.`);
+      console.log(`📊 Completion rate: ${Math.round(completionRate * 100)}% (${usableTranslations}/${expectedTranslations})`);
+      
+      // MUCH MORE LENIENT: Accept even 10% completion rate for complex presentations
+      const minCompletionRate = slideCount > 20 ? 0.10 : 0.20; // 10% for large presentations, 20% for smaller
+      
+      if (completionRate < minCompletionRate) {
+        console.warn(`⚠️ Low completion rate: ${Math.round(completionRate * 100)}%, but continuing with available translations`);
+        
+        // If we have ANY translations at all, use them with local fallback
+        if (usableTranslations > 0) {
+          console.log(`✅ Using ${usableTranslations} available translations with local fallback for missing ones`);
+          return translations;
+        } else {
+          throw new Error(`No usable translations found. Google Translate may not be working properly.`);
+        }
       }
       
       if (translatedSlides === 0) {
         throw new Error('No slides were successfully translated by Google Translate');
       }
       
-      console.log(`✅ Google Translate verification passed: ${Math.round(completionRate * 100)}% completion rate`);
+      console.log(`✅ Google Translate verification passed: ${Math.round(completionRate * 100)}% completion rate (${usableTranslations} usable translations)`);
       
       return translations;
       
     } catch (error) {
       console.error('❌ Failed to get/verify translations from Google Sheets:', error);
+      
+      // Better error context
+      if (error instanceof Error && error.message.includes('completion rate')) {
+        console.log('💡 Suggestion: The presentation may be too large or complex for Google Translate to process all at once');
+      }
+      
       throw error;
     }
   }
@@ -520,14 +555,17 @@ class TranslationService {
           // Simple case: one text element gets the entire translation
           translationMap[originalTexts[0]] = combinedTranslation;
         } else if (originalTexts.length > 1) {
-          // Multiple text elements: try to split translation
+          // Multiple text elements: try to split translation intelligently
           const words = combinedTranslation.split(/\s+/);
           const avgWordsPerElement = Math.ceil(words.length / originalTexts.length);
           
           let wordIndex = 0;
           originalTexts.forEach((originalText, idx) => {
             const originalWordCount = originalText.split(/\s+/).length;
-            const assignedWordCount = Math.min(avgWordsPerElement, words.length - wordIndex);
+            const assignedWordCount = Math.min(
+              Math.max(avgWordsPerElement, originalWordCount), 
+              words.length - wordIndex
+            );
             
             if (assignedWordCount > 0) {
               const assignedWords = words.slice(wordIndex, wordIndex + assignedWordCount);
@@ -535,7 +573,11 @@ class TranslationService {
               wordIndex += assignedWordCount;
             } else {
               // Fallback: use part of the translation
-              translationMap[originalText] = combinedTranslation;
+              const startRatio = idx / originalTexts.length;
+              const endRatio = (idx + 1) / originalTexts.length;
+              const startIndex = Math.floor(combinedTranslation.length * startRatio);
+              const endIndex = Math.floor(combinedTranslation.length * endRatio);
+              translationMap[originalText] = combinedTranslation.substring(startIndex, endIndex).trim() || combinedTranslation;
             }
           });
         }

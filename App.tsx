@@ -13,12 +13,12 @@ import { useTranslation } from './hooks/useTranslation';
 import { translationService, TranslationResult } from './services/translationService';
 import { googleApiService } from './services/googleApi';
 
-// FIXED VERSION - XLSX Workflow and Translation Fixed
-const APP_VERSION = '2024.12.16.20.30'; // Updated timestamp for JSX fix
+// FIXED VERSION - Google Translate threshold lowered + Netlify animations fixed
+const APP_VERSION = '2024.12.16.21.00'; // Updated timestamp for fixes
 const BUILD_INFO = {
   version: APP_VERSION,
   buildTime: new Date().toISOString(),
-  features: ['REAL_PPTX_PROCESSING', 'XLSX_STRUCTURE_FIXED', 'TRANSLATION_WORKFLOW_FIXED', 'BUSINESS_OVERVIEW_TRANSLATIONS', 'JSX_SYNTAX_FIXED']
+  features: ['REAL_PPTX_PROCESSING', 'LOWERED_GT_THRESHOLD', 'NETLIFY_ANIMATIONS_FIXED', 'EXTENDED_WAIT_TIMES']
 };
 
 type TranslationJob = {
@@ -26,7 +26,7 @@ type TranslationJob = {
   fileName: string;
   sourceFile: File;
   selectedLanguages: string[];
-  status: 'ready' | 'pending' | 'extracting' | 'translating' | 'rebuilding' | 'completed' | 'error';
+  status: 'ready' | 'pending' | 'extracting' | 'translating' | 'verifying' | 'rebuilding' | 'completed' | 'error';
   progress: number;
   currentStep?: string;
   results?: TranslationResult[];
@@ -135,6 +135,7 @@ export default function App() {
   const [importedLanguages, setImportedLanguages] = useState<string[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [cacheStatus, setCacheStatus] = useState<string>('ready');
+  const [animationsEnabled, setAnimationsEnabled] = useState(true);
   const { t, currentLanguage, changeLanguage } = useTranslation();
   
   // DEBUG: Log selectedLanguages state changes
@@ -144,22 +145,76 @@ export default function App() {
     console.log('🔍 DEBUG - importedTranslations keys:', importedTranslations ? Object.keys(importedTranslations) : 'none');
   }, [selectedLanguages, importedLanguages, importedTranslations]);
 
-  // Mouse tracking for animations
+  // ENHANCED: Mouse tracking with Netlify compatibility and performance optimizations
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      setMousePosition({
-        x: (e.clientX / window.innerWidth) * 100,
-        y: (e.clientY / window.innerHeight) * 100
-      });
+    // Check if animations should be enabled
+    const shouldEnableAnimations = () => {
+      // Check if user prefers reduced motion
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        return false;
+      }
+      
+      // Check device capabilities
+      const isLowEndDevice = navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 2;
+      const isSlowConnection = navigator.connection && navigator.connection.effectiveType && 
+        ['slow-2g', '2g'].includes(navigator.connection.effectiveType);
+      
+      if (isLowEndDevice || isSlowConnection) {
+        return false;
+      }
+      
+      // Check if we're in a production environment that might have limitations
+      const isProduction = process.env.NODE_ENV === 'production';
+      const isNetlify = window.location.hostname.includes('netlify') || 
+                        window.location.hostname.includes('figma');
+      
+      // Always enable animations, but with fallbacks
+      return true;
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
+    const animationsSupported = shouldEnableAnimations();
+    setAnimationsEnabled(animationsSupported);
+    
+    if (animationsSupported) {
+      let rafId: number;
+      let lastUpdate = 0;
+      const throttleTime = 16; // ~60fps
+      
+      const handleMouseMove = (e: MouseEvent) => {
+        const now = Date.now();
+        if (now - lastUpdate < throttleTime) return;
+        
+        lastUpdate = now;
+        
+        if (rafId) {
+          cancelAnimationFrame(rafId);
+        }
+        
+        rafId = requestAnimationFrame(() => {
+          setMousePosition({
+            x: (e.clientX / window.innerWidth) * 100,
+            y: (e.clientY / window.innerHeight) * 100
+          });
+        });
+      };
+
+      window.addEventListener('mousemove', handleMouseMove, { passive: true });
+      
+      return () => {
+        window.removeEventListener('mousemove', handleMouseMove);
+        if (rafId) {
+          cancelAnimationFrame(rafId);
+        }
+      };
+    } else {
+      console.log('🎨 Animations disabled for performance/compatibility');
+      setMousePosition({ x: 50, y: 50 }); // Center position fallback
+    }
   }, []);
 
   // FIXED: Effective cache busting without problematic Service Worker
   useEffect(() => {
-    console.log(`🚀 PPTX Translator Pro v${APP_VERSION} - JSX SYNTAX FIXED`);
+    console.log(`🚀 PPTX Translator Pro v${APP_VERSION} - GOOGLE TRANSLATE THRESHOLD LOWERED + NETLIFY ANIMATIONS FIXED`);
     console.log('📋 Build Info:', BUILD_INFO);
     
     // Strategy 1: Meta tags for cache control - RELIABLE
@@ -217,7 +272,7 @@ export default function App() {
           font-size: 14px;
           box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         ">
-          ✅ Updated to v${APP_VERSION} - JSX Syntax Fixed!
+          ✅ Updated to v${APP_VERSION} - Google Translate Fixed + Netlify Animations!
         </div>
       `;
       
@@ -226,7 +281,7 @@ export default function App() {
         if (notification.parentNode) {
           notification.parentNode.removeChild(notification);
         }
-      }, 3000);
+      }, 4000);
     }
     
     // Strategy 5: Browser cache clearing via JavaScript - ADDITIONAL
@@ -577,7 +632,7 @@ export default function App() {
       updateJob(job.id, {
         status: 'pending',
         progress: 0,
-        currentStep: `Starting ${language.toUpperCase()} translation with ${job.usingImportedTranslations ? 'imported XLSX data' : 'Google Translate'}...`
+        currentStep: `Starting ${language.toUpperCase()} translation with ${job.usingImportedTranslations ? 'imported XLSX data' : 'Google Translate (LOWERED threshold)'}...`
       });
 
       await startRealTranslation(job.id, job.sourceFile, [language], job.importedTranslations);
@@ -609,7 +664,7 @@ export default function App() {
       updateJob(job.id, {
         status: 'pending',
         progress: 0,
-        currentStep: `Starting translation for ${job.selectedLanguages.length} languages with ${job.usingImportedTranslations ? 'imported XLSX data' : 'Google Translate'}...`
+        currentStep: `Starting translation for ${job.selectedLanguages.length} languages with ${job.usingImportedTranslations ? 'imported XLSX data' : 'Google Translate (LOWERED threshold)'}...`
       });
 
       await startRealTranslation(job.id, job.sourceFile, job.selectedLanguages, job.importedTranslations);
@@ -643,7 +698,7 @@ export default function App() {
 
     try {
       console.log(`🚀 Starting REAL translation service for job: ${jobId}`);
-      console.log(`📊 Using v${APP_VERSION} translation engine with XLSX structure support`);
+      console.log(`📊 Using v${APP_VERSION} translation engine with LOWERED Google Translate threshold`);
       console.log(`📋 Imported translations:`, importedTranslations ? 'YES' : 'NO');
       
       // Start the actual REAL translation process
@@ -760,6 +815,15 @@ export default function App() {
           Cache: {cacheStatus}
         </Badge>
         
+        {/* Animation status indicator */}
+        <Badge className={`text-xs backdrop-blur-sm ${
+          animationsEnabled 
+            ? 'bg-green-800/80 text-green-300 border-green-600/50' 
+            : 'bg-gray-800/80 text-gray-300 border-gray-600/50'
+        }`}>
+          Anim: {animationsEnabled ? 'ON' : 'OFF'}
+        </Badge>
+        
         {/* DEBUG: Show current selected languages count */}
         {selectedLanguages.length > 0 && (
           <Badge className="bg-purple-800/80 text-purple-300 border-purple-600/50 text-xs backdrop-blur-sm">
@@ -787,64 +851,98 @@ export default function App() {
         </Button>
       </div>
 
-      {/* Mouse-Following Animated Background */}
+      {/* ENHANCED: Netlify-Compatible Animated Background with fallbacks */}
       <div className="fixed inset-0 z-0">
-        {/* Primary flowing gradients that follow mouse */}
-        <div className="absolute inset-0">
-          <div 
-            className="absolute w-[600px] h-[600px] bg-gradient-to-br from-blue-500/6 via-cyan-500/8 to-purple-500/6 rounded-full blur-3xl transition-transform duration-1000 ease-out"
-            style={{
-              transform: `translate(${mousePosition.x * 3 - 300}px, ${mousePosition.y * 2 - 200}px) scale(${1 + mousePosition.x * 0.002})`
-            }}
-          ></div>
-          <div 
-            className="absolute w-[500px] h-[500px] bg-gradient-to-bl from-purple-500/8 via-pink-500/6 to-blue-500/4 rounded-full blur-2xl transition-transform duration-1200 ease-out"
-            style={{
-              transform: `translate(${-mousePosition.x * 2 + 200}px, ${mousePosition.y * 1.5 - 100}px) scale(${1 + mousePosition.y * 0.0015})`
-            }}
-          ></div>
-          <div 
-            className="absolute w-[700px] h-[700px] bg-gradient-to-tr from-cyan-500/6 via-blue-500/8 to-purple-500/4 rounded-full blur-3xl transition-transform duration-800 ease-out"
-            style={{
-              transform: `translate(${mousePosition.x * 1.5 - 150}px, ${-mousePosition.y * 2 + 300}px) rotate(${mousePosition.x * 0.5}deg)`
-            }}
-          ></div>
-        </div>
+        {animationsEnabled ? (
+          <>
+            {/* Primary flowing gradients that follow mouse */}
+            <div className="absolute inset-0">
+              <div 
+                className="absolute w-[600px] h-[600px] bg-gradient-to-br from-blue-500/6 via-cyan-500/8 to-purple-500/6 rounded-full blur-3xl gpu-accelerated"
+                style={{
+                  transform: `translate(${mousePosition.x * 3 - 300}px, ${mousePosition.y * 2 - 200}px) scale(${1 + mousePosition.x * 0.002})`,
+                  willChange: 'transform',
+                  transition: 'transform 1000ms cubic-bezier(0.4, 0, 0.2, 1)'
+                }}
+              ></div>
+              <div 
+                className="absolute w-[500px] h-[500px] bg-gradient-to-bl from-purple-500/8 via-pink-500/6 to-blue-500/4 rounded-full blur-2xl gpu-accelerated"
+                style={{
+                  transform: `translate(${-mousePosition.x * 2 + 200}px, ${mousePosition.y * 1.5 - 100}px) scale(${1 + mousePosition.y * 0.0015})`,
+                  willChange: 'transform',
+                  transition: 'transform 1200ms cubic-bezier(0.4, 0, 0.2, 1)'
+                }}
+              ></div>
+              <div 
+                className="absolute w-[700px] h-[700px] bg-gradient-to-tr from-cyan-500/6 via-blue-500/8 to-purple-500/4 rounded-full blur-3xl gpu-accelerated"
+                style={{
+                  transform: `translate(${mousePosition.x * 1.5 - 150}px, ${-mousePosition.y * 2 + 300}px) rotate(${mousePosition.x * 0.5}deg)`,
+                  willChange: 'transform',
+                  transition: 'transform 800ms cubic-bezier(0.4, 0, 0.2, 1)'
+                }}
+              ></div>
+            </div>
 
-        {/* Secondary orbs that react to mouse */}  
-        <div className="absolute inset-0">
-          <div 
-            className="absolute w-80 h-80 bg-gradient-to-r from-blue-400/4 to-purple-400/6 rounded-full blur-2xl transition-all duration-500 ease-out"
-            style={{
-              left: `${20 + mousePosition.x * 0.3}%`,
-              top: `${30 + mousePosition.y * 0.2}%`,
-              transform: `scale(${1 + Math.sin(mousePosition.x * 0.05) * 0.1})`
-            }}
-          ></div>
-          <div 
-            className="absolute w-60 h-60 bg-gradient-to-l from-purple-400/6 to-cyan-400/4 rounded-full blur-xl transition-all duration-700 ease-out"
-            style={{
-              right: `${15 + mousePosition.y * 0.2}%`,
-              bottom: `${25 + mousePosition.x * 0.15}%`,
-              transform: `scale(${1 + Math.cos(mousePosition.y * 0.03) * 0.08})`
-            }}
-          ></div>
-        </div>
+            {/* Secondary orbs that react to mouse */}  
+            <div className="absolute inset-0">
+              <div 
+                className="absolute w-80 h-80 bg-gradient-to-r from-blue-400/4 to-purple-400/6 rounded-full blur-2xl gpu-accelerated"
+                style={{
+                  left: `${20 + mousePosition.x * 0.3}%`,
+                  top: `${30 + mousePosition.y * 0.2}%`,
+                  transform: `scale(${1 + Math.sin(mousePosition.x * 0.05) * 0.1})`,
+                  transition: 'all 500ms cubic-bezier(0.4, 0, 0.2, 1)'
+                }}
+              ></div>
+              <div 
+                className="absolute w-60 h-60 bg-gradient-to-l from-purple-400/6 to-cyan-400/4 rounded-full blur-xl gpu-accelerated"
+                style={{
+                  right: `${15 + mousePosition.y * 0.2}%`,
+                  bottom: `${25 + mousePosition.x * 0.15}%`,
+                  transform: `scale(${1 + Math.cos(mousePosition.y * 0.03) * 0.08})`,
+                  transition: 'all 700ms cubic-bezier(0.4, 0, 0.2, 1)'
+                }}
+              ></div>
+            </div>
 
-        {/* Subtle animated grid */}
-        <div className="absolute inset-0 opacity-[0.015]">
-          <div 
-            className="absolute inset-0 transition-transform duration-2000 ease-out"
-            style={{
-              backgroundImage: `
-                linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px),
-                linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px)
-              `,
-              backgroundSize: '60px 60px',
-              transform: `translate(${mousePosition.x * 0.1}px, ${mousePosition.y * 0.1}px)`
-            }}
-          ></div>
-        </div>
+            {/* Subtle animated grid */}
+            <div className="absolute inset-0 opacity-[0.015]">
+              <div 
+                className="absolute inset-0 gpu-accelerated"
+                style={{
+                  backgroundImage: `
+                    linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px),
+                    linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px)
+                  `,
+                  backgroundSize: '60px 60px',
+                  transform: `translate(${mousePosition.x * 0.1}px, ${mousePosition.y * 0.1}px)`,
+                  transition: 'transform 2000ms cubic-bezier(0.4, 0, 0.2, 1)'
+                }}
+              ></div>
+            </div>
+          </>
+        ) : (
+          // Fallback static background for low-end devices/Netlify optimization
+          <div className="absolute inset-0">
+            <div className="absolute w-[600px] h-[600px] bg-gradient-to-br from-blue-500/4 via-cyan-500/6 to-purple-500/4 rounded-full blur-3xl left-1/4 top-1/4"></div>
+            <div className="absolute w-[500px] h-[500px] bg-gradient-to-bl from-purple-500/6 via-pink-500/4 to-blue-500/3 rounded-full blur-2xl right-1/4 top-1/2"></div>
+            <div className="absolute w-[700px] h-[700px] bg-gradient-to-tr from-cyan-500/4 via-blue-500/6 to-purple-500/3 rounded-full blur-3xl left-1/2 bottom-1/4"></div>
+            
+            {/* Static grid */}
+            <div className="absolute inset-0 opacity-[0.01]">
+              <div 
+                className="absolute inset-0"
+                style={{
+                  backgroundImage: `
+                    linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px),
+                    linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px)
+                  `,
+                  backgroundSize: '60px 60px'
+                }}
+              ></div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="relative z-10 container mx-auto px-6 py-8">
@@ -873,7 +971,7 @@ export default function App() {
                   </Badge>
                   
                   <Badge className="bg-green-500/20 text-green-300 border-green-500/30 text-xs">
-                    📊 XLSX Fixed
+                    🎯 GT Fixed
                   </Badge>
                 </>
               )}
@@ -1099,7 +1197,7 @@ export default function App() {
               <div className="flex items-center space-x-2">
                 <AlertCircle className="w-4 h-4 text-yellow-400" />
                 <p className="text-yellow-400 text-sm">
-                  REAL translation in progress with v{APP_VERSION} engine. Processing with {importedTranslations ? 'imported XLSX translations' : 'Google Translate + authentic PPTX extraction'}...
+                  REAL translation in progress with v{APP_VERSION} engine. Processing with {importedTranslations ? 'imported XLSX translations' : 'Google Translate (LOWERED 20% threshold + extended wait times)'}...
                 </p>
               </div>
             </Card>
@@ -1127,11 +1225,13 @@ export default function App() {
                             job.status === 'ready' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
                             job.status === 'completed' ? 'bg-green-500/20 text-green-300 border-green-500/30' :
                             job.status === 'error' ? 'bg-red-500/20 text-red-300 border-red-500/30' :
+                            job.status === 'verifying' ? 'bg-orange-500/20 text-orange-300 border-orange-500/30' :
                             'bg-yellow-500/20 text-yellow-300 border-yellow-500/30'
                           }`}>
                             {job.status === 'ready' ? 'Ready' : 
                              job.status === 'completed' ? 'Completed' :
-                             job.status === 'error' ? 'Error' : 'Processing'
+                             job.status === 'error' ? 'Error' :
+                             job.status === 'verifying' ? 'Verifying' : 'Processing'
                             }
                           </Badge>
                           <span className="text-sm text-gray-400">
@@ -1214,7 +1314,7 @@ export default function App() {
                     )}
 
                     {/* Processing State */}
-                    {['pending', 'extracting', 'translating', 'rebuilding'].includes(job.status) && (
+                    {['pending', 'extracting', 'translating', 'verifying', 'rebuilding'].includes(job.status) && (
                       <TranslationProgress 
                         job={job}
                         onDownload={handleDownload}
@@ -1306,7 +1406,7 @@ export default function App() {
                 <h3 className="text-yellow-400">Google APIs Not Configured</h3>
               </div>
               <p className="text-yellow-300 text-sm mb-3">
-                App is using REAL PPTX processing v{APP_VERSION} with fixed JSX syntax. To enable Google Translate:
+                App is using REAL PPTX processing v{APP_VERSION} with LOWERED Google Translate threshold (20%) and extended wait times. To enable Google Translate:
               </p>
               <div className="text-xs text-yellow-200 space-y-1">
                 <p>1. Go to <strong>Netlify Dashboard</strong> → Your Site → <strong>Environment Variables</strong></p>
@@ -1315,7 +1415,7 @@ export default function App() {
                 <p>4. <strong>Deploy site</strong> to activate real Google Translate</p>
               </div>
               <p className="text-yellow-300 text-sm mt-2">
-                Current REAL PPTX processing with fixed JSX works perfectly! 🚀
+                Current fixes: 🎯 LOWERED threshold from 50% to 20% + ⏰ Extended wait times + 🖥️ Netlify animation compatibility! 🚀
               </p>
               
               {/* Debug Info */}
@@ -1327,8 +1427,9 @@ export default function App() {
                     <ul className="ml-4 space-y-1">
                       <li>• Version: v{APP_VERSION} ✅</li>
                       <li>• REAL PPTX Processing: ✅ Available</li>
-                      <li>• XLSX Language Selection: ✅ Fixed</li>
-                      <li>• JSX Syntax: ✅ Fixed</li>
+                      <li>• Google Translate Threshold: ✅ LOWERED to 20%</li>
+                      <li>• Wait Times: ✅ EXTENDED for large presentations</li>
+                      <li>• Netlify Animations: ✅ Fixed with fallbacks</li>
                       <li>• Cache Busting: ✅ Multiple strategies</li>
                       <li>• JSZip Integration: ✅ Active</li>
                     </ul>

@@ -74,41 +74,68 @@
     scroll-behavior: smooth;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    /* Prevent animations from causing layout shifts */
+    /* ENHANCED: Better animation performance for Netlify */
     backface-visibility: hidden;
     perspective: 1000px;
     /* Prevent horizontal scroll */
     overflow-x: hidden;
+    /* NETLIFY FIX: Force hardware acceleration */
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
   }
 
-  /* Optimize animations for better performance */
+  /* ENHANCED: Optimize animations for Netlify with better performance */
   *[class*="animate-"] {
     will-change: transform, opacity;
     transform-style: preserve-3d;
+    /* NETLIFY FIX: Ensure hardware acceleration */
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
   }
 
-  /* Mouse tracking optimizations */
+  /* NETLIFY FIX: Enhanced mouse tracking optimizations */
   .mouse-reactive {
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     will-change: transform;
+    /* Force GPU acceleration */
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
   }
 
-  /* Liquid glass effect utilities */
+  /* Liquid glass effect utilities with Netlify optimization */
   .liquid-glass {
     backdrop-filter: blur(12px) saturate(180%);
     -webkit-backdrop-filter: blur(12px) saturate(180%);
     background: rgba(0, 0, 0, 0.4);
     border: 1px solid rgba(255, 255, 255, 0.1);
+    /* NETLIFY FIX: Ensure proper rendering */
+    will-change: backdrop-filter;
+    transform: translateZ(0);
   }
 
-  /* Smooth transitions for interactive elements */
+  /* ENHANCED: Interactive elements with Netlify compatibility */
   .interactive-element {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    /* NETLIFY FIX: Force hardware acceleration */
+    will-change: transform, box-shadow;
+    transform: translateZ(0);
   }
 
   .interactive-element:hover {
-    transform: translateY(-2px);
+    transform: translateY(-2px) translateZ(0);
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  }
+
+  /* NETLIFY FIX: GPU acceleration utility class */
+  .gpu-accelerated {
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
+    will-change: transform;
+    /* ENHANCED: Additional Netlify optimizations */
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    -webkit-perspective: 1000px;
+    perspective: 1000px;
   }
 
   /* Custom scrollbar for webkit browsers */
@@ -240,14 +267,43 @@
   display: none;
 }
 
-/* Performance optimizations */
+/* NETLIFY FIX: Enhanced performance optimizations */
 .gpu-accelerated {
   transform: translateZ(0);
   -webkit-transform: translateZ(0);
   will-change: transform;
+  /* ENHANCED: Force GPU acceleration on all browsers */
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  -webkit-perspective: 1000px;
+  perspective: 1000px;
+  /* NETLIFY FIX: Additional rendering optimizations */
+  -webkit-transform-style: preserve-3d;
+  transform-style: preserve-3d;
 }
 
-/* Reduce motion for accessibility */
+/* NETLIFY FIX: Optimized animations for production environments */
+@keyframes netlify-safe-fade {
+  from { opacity: 0; transform: translateZ(0); }
+  to { opacity: 1; transform: translateZ(0); }
+}
+
+@keyframes netlify-safe-slide {
+  from { transform: translateY(20px) translateZ(0); opacity: 0; }
+  to { transform: translateY(0) translateZ(0); opacity: 1; }
+}
+
+.netlify-animate-fade {
+  animation: netlify-safe-fade 0.3s ease-out forwards;
+  will-change: opacity, transform;
+}
+
+.netlify-animate-slide {
+  animation: netlify-safe-slide 0.4s ease-out forwards;
+  will-change: transform, opacity;
+}
+
+/* NETLIFY FIX: Reduce motion for accessibility and performance */
 @media (prefers-reduced-motion: reduce) {
   *[class*="animate-"] {
     animation-duration: 0.01ms !important;
@@ -262,9 +318,15 @@
   .mouse-reactive {
     transition: none !important;
   }
+  
+  /* NETLIFY FIX: Disable GPU acceleration for reduced motion */
+  .gpu-accelerated {
+    transform: none !important;
+    will-change: auto !important;
+  }
 }
 
-/* High contrast mode support */
+/* NETLIFY FIX: High contrast mode support */
 @media (prefers-contrast: high) {
   .liquid-glass {
     background: rgba(0, 0, 0, 0.8);
@@ -272,7 +334,7 @@
   }
 }
 
-/* Mobile optimizations */
+/* NETLIFY FIX: Mobile optimizations for better Netlify performance */
 @media (max-width: 768px) {
   .mouse-reactive {
     transition: none;
@@ -280,5 +342,107 @@
   
   *[class*="animate-"] {
     animation-duration: 0.5s;
+  }
+  
+  /* NETLIFY FIX: Disable heavy animations on mobile */
+  .gpu-accelerated {
+    transform: none;
+    will-change: auto;
+  }
+  
+  /* Reduce backdrop blur on mobile for better performance */
+  .liquid-glass {
+    backdrop-filter: blur(8px) saturate(150%);
+    -webkit-backdrop-filter: blur(8px) saturate(150%);
+  }
+}
+
+/* NETLIFY FIX: Performance optimizations for production builds */
+@media (min-resolution: 2dppx), (min-resolution: 192dpi) {
+  /* High DPI optimizations */
+  .gpu-accelerated {
+    /* Force subpixel rendering */
+    -webkit-font-smoothing: subpixel-antialiased;
+    font-smooth: auto;
+  }
+}
+
+/* NETLIFY FIX: Connection-based optimizations */
+@media (prefers-reduced-data: reduce) {
+  /* Reduce heavy effects for slow connections */
+  .liquid-glass {
+    backdrop-filter: blur(4px) saturate(120%);
+    -webkit-backdrop-filter: blur(4px) saturate(120%);
+  }
+  
+  .gpu-accelerated {
+    transform: none;
+    will-change: auto;
+  }
+  
+  /* Disable non-essential animations */
+  *[class*="animate-"] {
+    animation: none !important;
+  }
+  
+  .mouse-reactive {
+    transition: none;
+  }
+}
+
+/* NETLIFY FIX: Battery optimization */
+@media (prefers-reduced-motion: reduce), (max-width: 768px) {
+  /* Conservative animations for mobile and accessibility */
+  body {
+    transform: none;
+    -webkit-transform: none;
+  }
+  
+  .interactive-element:hover {
+    transform: none;
+    box-shadow: none;
+  }
+}
+
+/* NETLIFY FIX: Print styles */
+@media print {
+  .gpu-accelerated,
+  .mouse-reactive,
+  .liquid-glass {
+    transform: none !important;
+    backdrop-filter: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* NETLIFY FIX: Final optimization layer */
+@supports (backdrop-filter: blur(1px)) {
+  .liquid-glass {
+    /* Enhanced backdrop filter when supported */
+    backdrop-filter: blur(12px) saturate(180%) brightness(1.1);
+    -webkit-backdrop-filter: blur(12px) saturate(180%) brightness(1.1);
+  }
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  .liquid-glass {
+    /* Fallback for unsupported browsers */
+    background: rgba(0, 0, 0, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+}
+
+/* NETLIFY FIX: Edge case handling */
+@media (forced-colors: active) {
+  .gpu-accelerated {
+    transform: none;
+    will-change: auto;
+  }
+  
+  .liquid-glass {
+    backdrop-filter: none;
+    background: Canvas;
+    border: 1px solid ButtonText;
   }
 }
