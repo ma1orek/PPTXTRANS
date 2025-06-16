@@ -51,7 +51,7 @@
     "embla-carousel-react": "^8.0.0-rc19",
     "date-fns": "^2.30.0",
     "react-day-picker": "^8.9.1",
-    "cmdk": "^0.2.0",
+    "cmdk": "^0.2.0",  
     "vaul": "^0.7.9",
     "react-resizable-panels": "^0.0.55"
   },
@@ -67,6 +67,7 @@
     "typescript": "^5.2.2",
     "vite": "^5.0.8",
     "tailwindcss": "^4.0.0-alpha.25",
+    "@tailwindcss/postcss": "^4.0.0-alpha.25",
     "autoprefixer": "^10.4.16",
     "postcss": "^8.4.32",
     "terser": "^5.24.0"

@@ -1,3 +1,4 @@
+// TAILWIND V4 CONFIG - Optimized for Netlify
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
@@ -50,26 +51,20 @@ export default {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
-      fontFamily: {
-        sans: ["Inter", "system-ui", "sans-serif"],
-        serif: ["Georgia", "serif"],
-        mono: ["Fira Code", "monospace"],
+      keyframes: {
+        "accordion-down": {
+          from: { height: "0" },
+          to: { height: "var(--radix-accordion-content-height)" },
+        },
+        "accordion-up": {
+          from: { height: "var(--radix-accordion-content-height)" },
+          to: { height: "0" },
+        },
       },
       animation: {
-        "success-glow": "success-glow 3s ease-in-out infinite",
+        "accordion-down": "accordion-down 0.2s ease-out",
+        "accordion-up": "accordion-up 0.2s ease-out",
       },
-      keyframes: {
-        "success-glow": {
-          "0%, 100%": { 
-            opacity: "0.75",
-            transform: "scale(1)"
-          },
-          "50%": { 
-            opacity: "1",
-            transform: "scale(1.02)"
-          }
-        }
-      }
     },
   },
   plugins: [],

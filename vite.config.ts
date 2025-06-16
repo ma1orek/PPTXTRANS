@@ -2,7 +2,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
-// https://vitejs.dev/config/
+// TAILWIND V4 + NETLIFY OPTIMIZED VITE CONFIG
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -12,6 +12,9 @@ export default defineConfig({
   },
   define: {
     global: 'globalThis',
+  },
+  css: {
+    postcss: './postcss.config.js',
   },
   build: {
     target: 'es2015',
@@ -33,7 +36,8 @@ export default defineConfig({
         manualChunks: {
           'react-vendor': ['react', 'react-dom'],
           'ui-vendor': ['lucide-react', '@radix-ui/react-slot'],
-          'xlsx-vendor': ['xlsx']
+          'xlsx-vendor': ['xlsx'],
+          'jszip-vendor': ['jszip']
         },
         chunkFileNames: 'assets/[name]-[hash].js',
         entryFileNames: 'assets/[name]-[hash].js',

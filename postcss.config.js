@@ -1,8 +1,10 @@
-// PostCSS Configuration for PPTX Translator Pro
-// Compatible with Tailwind CSS v3.4+ and Vite
+// TAILWIND V4 POSTCSS CONFIG - Netlify Compatible
+// Fixed for Tailwind CSS v4.0 with proper PostCSS plugin
+
 export default {
   plugins: {
-    tailwindcss: {},
+    // IMPORTANT: For Tailwind v4, we need @tailwindcss/postcss instead of 'tailwindcss'
+    '@tailwindcss/postcss': {},
     autoprefixer: {},
   },
-};
+}
