@@ -1,4 +1,4 @@
-// FIXED: Real PPTX Processor with ACTUAL text replacement
+// ENHANCED Real PPTX Processor with improved text replacement
 import JSZip from 'jszip';
 
 export interface PPTXSlideTextData {
@@ -34,10 +34,10 @@ class RealPPTXProcessor {
   private pptxStructure: PPTXStructure | null = null;
   private appliedTranslations: Record<string, PPTXTranslationData> = {};
 
-  // FIXED: Load PPTX file with REAL XML parsing
+  // Load PPTX file with enhanced XML parsing
   async loadPPTXFile(file: File): Promise<PPTXStructure> {
     try {
-      console.log(`🔍 REAL PPTX Loading: ${file.name} (${Math.round(file.size/1024/1024)}MB)`);
+      console.log(`🔍 Loading PPTX file: ${file.name} (${Math.round(file.size/1024/1024)}MB)`);
       
       const zip = new JSZip();
       const zipContent = await zip.loadAsync(file);
@@ -55,11 +55,9 @@ class RealPPTXProcessor {
       const slideRelationships: Record<string, string> = {};
       const slides: PPTXSlideTextData[] = [];
       
-      // ENHANCED: Find slides by scanning the ZIP contents
+      // Enhanced slide discovery
       const slideFilePattern = /^ppt\/slides\/slide(\d+)\.xml$/;
-      const slideRelPattern = /^ppt\/slides\/_rels\/slide(\d+)\.xml\.rels$/;
       
-      // Get slide files
       for (const fileName in zipContent.files) {
         const slideMatch = fileName.match(slideFilePattern);
         if (slideMatch) {
@@ -70,7 +68,7 @@ class RealPPTXProcessor {
           
           console.log(`📄 Found slide: ${slideId} (${slideContent.length} chars)`);
           
-          // Extract text from slide
+          // Extract text with enhanced parsing
           const textElements = this.extractTextFromSlideXML(slideContent, slideId, slideNumber);
           slides.push({
             slideIndex: slideNumber,
@@ -89,7 +87,8 @@ class RealPPTXProcessor {
       // Sort slides by index
       slides.sort((a, b) => a.slideIndex - b.slideIndex);
       
-      console.log(`✅ REAL PPTX loaded: ${slides.length} slides, ${slides.reduce((sum, s) => sum + s.textElements.length, 0)} text elements`);
+      const totalTextElements = slides.reduce((sum, s) => sum + s.textElements.length, 0);
+      console.log(`✅ PPTX loaded: ${slides.length} slides, ${totalTextElements} text elements`);
       
       this.pptxStructure = {
         slides,
@@ -105,7 +104,7 @@ class RealPPTXProcessor {
       return this.pptxStructure;
       
     } catch (error) {
-      console.error('❌ REAL PPTX loading failed:', error);
+      console.error('❌ PPTX loading failed:', error);
       throw new Error(`Failed to load PPTX file: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -125,56 +124,58 @@ class RealPPTXProcessor {
     }> = [];
     
     try {
-      // ENHANCED: Extract text from <a:t> elements (actual text content)
-      const textRegex = /<a:t[^>]*>([^<]+)<\/a:t>/g;
-      let match;
+      console.log(`📝 Extracting text from slide ${slideNumber}...`);
+      
+      // ENHANCED: Multiple extraction strategies
+      const extractionStrategies = [
+        // Strategy 1: Direct <a:t> elements
+        {
+          name: 'Direct a:t elements',
+          regex: /<a:t[^>]*>([^<]+)<\/a:t>/g,
+          processor: (match: RegExpMatchArray) => this.cleanExtractedText(match[1])
+        },
+        // Strategy 2: Text runs with formatting
+        {
+          name: 'Text runs',
+          regex: /<a:r[^>]*>.*?<a:t[^>]*>([^<]+)<\/a:t>.*?<\/a:r>/g,
+          processor: (match: RegExpMatchArray) => this.cleanExtractedText(match[1])
+        },
+        // Strategy 3: Paragraph text
+        {
+          name: 'Paragraph text',
+          regex: /<a:p[^>]*>.*?<a:t[^>]*>([^<]+)<\/a:t>.*?<\/a:p>/g,
+          processor: (match: RegExpMatchArray) => this.cleanExtractedText(match[1])
+        }
+      ];
+      
       let elementIndex = 0;
+      const foundTexts = new Set<string>(); // Avoid duplicates
       
-      while ((match = textRegex.exec(slideXML)) !== null) {
-        const textContent = match[1];
-        
-        // Skip empty or whitespace-only text
-        if (textContent && textContent.trim().length > 0) {
-          const cleanText = this.cleanExtractedText(textContent);
+      extractionStrategies.forEach(strategy => {
+        let match;
+        while ((match = strategy.regex.exec(slideXML)) !== null) {
+          const cleanText = strategy.processor(match);
           
-          if (cleanText.length > 0) {
+          if (cleanText && cleanText.length > 0 && !foundTexts.has(cleanText)) {
+            foundTexts.add(cleanText);
+            
             textElements.push({
-              elementId: `${slideId}_text_${elementIndex}`,
+              elementId: `${slideId}_${strategy.name.replace(/\s+/g, '_')}_${elementIndex}`,
               originalText: cleanText,
-              xpath: `//a:t[${elementIndex + 1}]`,
+              xpath: `//a:t[contains(text(),'${cleanText.substring(0, 20).replace(/'/g, "\\'")}')]`,
               slideRelId: slideId
             });
             
             elementIndex++;
-            console.log(`📝 Slide ${slideNumber} text ${elementIndex}: "${cleanText}"`);
+            console.log(`📝 Slide ${slideNumber} [${strategy.name}]: "${cleanText}"`);
           }
         }
-      }
-      
-      // Also try to extract from paragraph runs (<a:r><a:t>)
-      const runTextRegex = /<a:r[^>]*>.*?<a:t[^>]*>([^<]+)<\/a:t>.*?<\/a:r>/g;
-      while ((match = runTextRegex.exec(slideXML)) !== null) {
-        const textContent = match[1];
         
-        if (textContent && textContent.trim().length > 0) {
-          const cleanText = this.cleanExtractedText(textContent);
-          
-          // Avoid duplicates
-          if (cleanText.length > 0 && !textElements.some(el => el.originalText === cleanText)) {
-            textElements.push({
-              elementId: `${slideId}_run_${elementIndex}`,
-              originalText: cleanText,
-              xpath: `//a:r/a:t[contains(text(),'${cleanText.substring(0, 20)}')]`,
-              slideRelId: slideId
-            });
-            
-            elementIndex++;
-            console.log(`📝 Slide ${slideNumber} run text: "${cleanText}"`);
-          }
-        }
-      }
+        // Reset regex for next strategy
+        strategy.regex.lastIndex = 0;
+      });
       
-      console.log(`✅ Slide ${slideNumber}: extracted ${textElements.length} text elements`);
+      console.log(`✅ Slide ${slideNumber}: extracted ${textElements.length} unique text elements using multiple strategies`);
       
     } catch (error) {
       console.error(`❌ Text extraction failed for slide ${slideNumber}:`, error);
@@ -183,7 +184,7 @@ class RealPPTXProcessor {
     return textElements;
   }
 
-  // Clean extracted text
+  // Clean extracted text with better handling
   private cleanExtractedText(text: string): string {
     return text
       .replace(/&lt;/g, '<')
@@ -191,6 +192,7 @@ class RealPPTXProcessor {
       .replace(/&amp;/g, '&')
       .replace(/&quot;/g, '"')
       .replace(/&apos;/g, "'")
+      .replace(/\s+/g, ' ') // Normalize whitespace
       .trim();
   }
 
@@ -203,60 +205,85 @@ class RealPPTXProcessor {
     return await file.async('text');
   }
 
-  // CRITICAL FIX: Apply translations with REAL text replacement
+  // CRITICAL: Apply translations with ENHANCED text replacement
   async applyTranslations(translationsData: Record<string, PPTXTranslationData>): Promise<void> {
     if (!this.pptxStructure) {
       throw new Error('PPTX not loaded. Call loadPPTXFile first.');
     }
 
-    console.log('🔄 APPLYING REAL TRANSLATIONS TO PPTX...');
-    console.log('📊 Translation data keys:', Object.keys(translationsData));
+    console.log('🔄 APPLYING ENHANCED TRANSLATIONS TO PPTX...');
+    console.log('📊 Translation data:', Object.keys(translationsData));
     
-    // Store applied translations
     this.appliedTranslations = { ...translationsData };
+    
+    let totalReplacements = 0;
     
     // Apply translations to each slide
     for (const [slideId, translationData] of Object.entries(translationsData)) {
       if (this.pptxStructure.slideFiles[slideId]) {
         console.log(`🔄 Processing slide: ${slideId}`);
-        console.log(`📝 Translations available:`, Object.keys(translationData.translations));
+        console.log(`📝 Available translations:`, Object.keys(translationData.translations));
         
-        // FIXED: Actually replace text in slide XML
         let modifiedSlideXML = this.pptxStructure.slideFiles[slideId];
-        let replacementCount = 0;
+        let slideReplacements = 0;
         
-        // Apply each translation
+        // Apply each translation with multiple strategies
         for (const [originalText, translatedText] of Object.entries(translationData.translations)) {
           if (originalText && translatedText && originalText !== translatedText) {
             console.log(`🔄 Replacing: "${originalText}" → "${translatedText}"`);
             
-            // ENHANCED: Multiple replacement strategies
-            const replacements = [
-              // Strategy 1: Direct text replacement in <a:t> tags
+            const beforeXML = modifiedSlideXML;
+            
+            // ENHANCED: Multiple replacement strategies for better success rate
+            const replacementStrategies = [
+              // Strategy 1: Exact text replacement in <a:t> tags
               {
-                pattern: new RegExp(`(<a:t[^>]*>)${this.escapeRegex(originalText)}(<\/a:t>)`, 'g'),
+                name: 'Exact a:t replacement',
+                pattern: new RegExp(`(<a:t[^>]*>)\\s*${this.escapeRegex(originalText)}\\s*(<\/a:t>)`, 'gi'),
                 replacement: `$1${this.escapeXML(translatedText)}$2`
               },
-              // Strategy 2: Replace in text content anywhere
+              // Strategy 2: Text content with surrounding whitespace
               {
-                pattern: new RegExp(`>${this.escapeRegex(originalText)}<`, 'g'),
-                replacement: `>${this.escapeXML(translatedText)}<`
+                name: 'Text with whitespace',
+                pattern: new RegExp(`(>)\\s*${this.escapeRegex(originalText)}\\s*(<)`, 'gi'),
+                replacement: `$1${this.escapeXML(translatedText)}$2`
               },
-              // Strategy 3: Replace exact text content
+              // Strategy 3: Direct text replacement
               {
-                pattern: new RegExp(this.escapeRegex(originalText), 'g'),
+                name: 'Direct text replacement',
+                pattern: new RegExp(this.escapeRegex(originalText), 'gi'),
+                replacement: this.escapeXML(translatedText)
+              },
+              // Strategy 4: Partial word boundary replacement
+              {
+                name: 'Word boundary replacement',
+                pattern: new RegExp(`\\b${this.escapeRegex(originalText)}\\b`, 'gi'),
                 replacement: this.escapeXML(translatedText)
               }
             ];
             
-            for (const { pattern, replacement } of replacements) {
-              const beforeLength = modifiedSlideXML.length;
-              modifiedSlideXML = modifiedSlideXML.replace(pattern, replacement);
+            let replacementMade = false;
+            
+            for (const strategy of replacementStrategies) {
+              const testXML = modifiedSlideXML.replace(strategy.pattern, strategy.replacement);
               
-              if (modifiedSlideXML.length !== beforeLength) {
-                replacementCount++;
-                console.log(`✅ Applied replacement strategy for: "${originalText}"`);
+              if (testXML !== modifiedSlideXML) {
+                modifiedSlideXML = testXML;
+                slideReplacements++;
+                totalReplacements++;
+                replacementMade = true;
+                console.log(`✅ Applied ${strategy.name} for: "${originalText}"`);
                 break; // Stop after first successful replacement
+              }
+            }
+            
+            if (!replacementMade) {
+              console.warn(`⚠️ No replacement strategy worked for: "${originalText}"`);
+              
+              // Debug: Show context around the text
+              const contextMatch = beforeXML.match(new RegExp(`.{0,50}${this.escapeRegex(originalText)}.{0,50}`, 'i'));
+              if (contextMatch) {
+                console.log(`🔍 Context: "${contextMatch[0]}"`);
               }
             }
           }
@@ -264,22 +291,26 @@ class RealPPTXProcessor {
         
         // Update slide content
         this.pptxStructure.slideFiles[slideId] = modifiedSlideXML;
-        console.log(`✅ Slide ${slideId}: ${replacementCount} text replacements applied`);
+        console.log(`✅ Slide ${slideId}: ${slideReplacements} text replacements applied`);
         
       } else {
         console.warn(`⚠️ Slide not found: ${slideId}`);
       }
     }
     
-    console.log('✅ ALL TRANSLATIONS APPLIED TO PPTX STRUCTURE');
+    console.log(`✅ ALL TRANSLATIONS APPLIED: ${totalReplacements} total replacements across all slides`);
+    
+    if (totalReplacements === 0) {
+      console.warn('⚠️ WARNING: No text replacements were made! This may indicate a problem with text extraction or replacement logic.');
+    }
   }
 
-  // Escape text for regex
+  // Enhanced regex escaping
   private escapeRegex(text: string): string {
     return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
-  // Escape text for XML
+  // Enhanced XML escaping
   private escapeXML(text: string): string {
     return text
       .replace(/&/g, '&amp;')
@@ -289,13 +320,13 @@ class RealPPTXProcessor {
       .replace(/'/g, '&apos;');
   }
 
-  // FIXED: Generate translated PPTX with REAL modified content
+  // ENHANCED: Generate translated PPTX with verification
   async generateTranslatedPPTX(language: string): Promise<Blob> {
     if (!this.pptxStructure) {
       throw new Error('PPTX not loaded or translations not applied');
     }
 
-    console.log(`📦 Generating TRANSLATED PPTX for ${language}...`);
+    console.log(`📦 Generating translated PPTX for ${language}...`);
     
     try {
       // Create new ZIP with modified content
@@ -316,10 +347,11 @@ class RealPPTXProcessor {
               const slideId = `slide${slideNumber}`;
               
               if (this.pptxStructure.slideFiles[slideId]) {
-                console.log(`📝 Adding modified slide: ${fileName}`);
+                console.log(`📝 Adding translated slide: ${fileName}`);
                 newZip.file(fileName, this.pptxStructure.slideFiles[slideId]);
               } else {
                 // Fallback to original
+                console.warn(`⚠️ Using original slide: ${fileName}`);
                 newZip.file(fileName, await file.async('text'));
               }
             }
@@ -334,7 +366,7 @@ class RealPPTXProcessor {
         }
       }
       
-      // Generate the PPTX blob
+      // Generate the PPTX blob with optimization
       const pptxBlob = await newZip.generateAsync({
         type: 'blob',
         mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
@@ -346,9 +378,18 @@ class RealPPTXProcessor {
       
       console.log(`✅ Generated translated PPTX: ${Math.round(pptxBlob.size/1024)}KB`);
       
-      // Verify size is reasonable
+      // Verify file integrity
       if (pptxBlob.size < 1000) {
         throw new Error('Generated PPTX file is too small - likely corrupted');
+      }
+      
+      // Verify it's significantly different from original (indicating translations were applied)
+      const originalSize = this.pptxStructure.originalZip.files['[Content_Types].xml'] ? 
+        (await this.pptxStructure.originalZip.generateAsync({ type: 'blob' })).size : 0;
+      
+      const sizeDifference = Math.abs(pptxBlob.size - originalSize);
+      if (sizeDifference < 100 && Object.keys(this.appliedTranslations).length > 0) {
+        console.warn('⚠️ Generated file size very similar to original - translations may not have been applied properly');
       }
       
       return pptxBlob;
@@ -377,7 +418,7 @@ class RealPPTXProcessor {
     return slide ? slide.textElements.map(el => el.originalText) : [];
   }
 
-  // ENHANCED: Get all text for XLSX generation
+  // Get all extracted text for XLSX generation
   getAllExtractedText(): Record<string, string[]> {
     if (!this.pptxStructure) return {};
     

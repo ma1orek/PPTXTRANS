@@ -45,65 +45,67 @@ export default function XLSXImporter({ onImport }: XLSXImporterProps) {
     }
   };
 
-  // FIXED: Process XLSX/CSV file with CORRECT structure parsing from user's image
+  // FIXED: Simplified XLSX processing with better error handling
   const handleFileProcess = async (file: File) => {
     setIsProcessing(true);
     
     try {
-      console.log(`📊 Processing XLSX/CSV file with CORRECT structure: ${file.name}`);
+      console.log(`📊 Processing XLSX/CSV file: ${file.name}`);
       
       const text = await file.text();
-      console.log('📄 File content loaded, parsing with proper column structure...');
+      console.log('📄 File content loaded, parsing...');
       
-      // Parse CSV content
-      const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-      
-      if (lines.length < 2) {
-        throw new Error('File appears to be empty or invalid');
+      if (!text || text.trim().length === 0) {
+        throw new Error('File is empty or could not be read');
       }
       
-      // FIXED: Parse header row to detect CORRECT structure as in user's image
+      // Parse CSV content with better error handling
+      const lines = text.split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0);
+      
+      if (lines.length < 2) {
+        throw new Error('File must have at least 2 lines (header + data)');
+      }
+      
+      console.log(`📋 Found ${lines.length} lines in file`);
+      
+      // SIMPLIFIED: Parse header row - expect simple structure
       const headerLine = lines[0];
       const headers = parseCSVLine(headerLine);
       
-      console.log('📋 Detected headers:', headers);
-      console.log('🔍 Analyzing structure for separate language columns...');
+      console.log('📋 Headers found:', headers);
       
-      // CRITICAL FIX: Validate CORRECT structure - separate columns as in user's image
       if (headers.length < 3) {
-        throw new Error('Invalid structure: Need at least Slide, English, and one language column');
+        throw new Error('Need at least 3 columns: Slide, English, and one target language');
       }
       
-      // Check for WRONG format (combined headers like "Slide.English.Italian")
-      const hasWrongFormat = headers.some(header => 
-        header.includes('.') && (header.toLowerCase().includes('slide') || header.toLowerCase().includes('english'))
-      );
+      // SIMPLIFIED: Find basic columns
+      const slideColIndex = findSlideColumn(headers);
+      const englishColIndex = findEnglishColumn(headers);
       
-      if (hasWrongFormat) {
-        throw new Error('WRONG FORMAT DETECTED! Headers should be separate columns: "Slide", "English", "Dutch", "Spanish"... NOT combined like "Slide.English.Italian"');
+      if (slideColIndex === -1) {
+        throw new Error(`Could not find Slide column. Found headers: ${headers.join(', ')}`);
       }
       
-      // Find column indexes for CORRECT structure
-      const slideColumnIndex = findColumnIndex(headers, ['slide', 'slides', 'slide number', 'slide_number']);
-      const englishColumnIndex = findColumnIndex(headers, ['english', 'original text', 'original', 'originaltext', 'english text']);
-      
-      if (slideColumnIndex === -1) {
-        throw new Error('Could not find Slide column. Expected: "Slide" (separate column)');
+      if (englishColIndex === -1) {
+        throw new Error(`Could not find English column. Found headers: ${headers.join(', ')}`);
       }
       
-      if (englishColumnIndex === -1) {
-        throw new Error('Could not find English column. Expected: "English" (separate column)');
-      }
-      
-      // ENHANCED: Identify language columns (separate columns after English)
+      // SIMPLIFIED: Find language columns (everything else that's not slide/english)
       const languageColumns: Array<{index: number, name: string, code: string}> = [];
       
       for (let i = 0; i < headers.length; i++) {
-        if (i !== slideColumnIndex && i !== englishColumnIndex) {
+        if (i !== slideColIndex && i !== englishColIndex) {
           const headerName = headers[i].trim();
           
-          // Skip instruction/metadata columns
-          if (!['instructions', 'info', 'google api', 'api', 'structure', 'step', 'correct', 'wrong', 'right', 'how to use', ''].includes(headerName.toLowerCase())) {
+          // Skip empty or instruction headers
+          if (headerName && 
+              !headerName.toLowerCase().includes('instruction') &&
+              !headerName.toLowerCase().includes('step') &&
+              !headerName.toLowerCase().includes('info') &&
+              headerName.length > 0) {
+            
             const languageCode = mapLanguageNameToCode(headerName);
             if (languageCode) {
               languageColumns.push({
@@ -111,50 +113,49 @@ export default function XLSXImporter({ onImport }: XLSXImporterProps) {
                 name: headerName,
                 code: languageCode
               });
-              console.log(`✅ Found language column: ${headerName} → ${languageCode} (column ${i})`);
+              console.log(`✅ Language column: ${headerName} → ${languageCode}`);
             } else {
-              console.warn(`⚠️ Unknown language column: ${headerName}`);
+              console.warn(`⚠️ Unknown language: ${headerName}`);
             }
           }
         }
       }
       
-      console.log('🌍 Detected language columns:', languageColumns.map(l => `${l.name} (${l.code})`));
-      
       if (languageColumns.length === 0) {
-        throw new Error('No language columns detected. Please ensure you have separate language headers like: Dutch, Spanish, French, etc.');
+        throw new Error(`No recognized language columns found. Expected language names like: Dutch, Spanish, Polish, etc. Found: ${headers.filter((h, i) => i !== slideColIndex && i !== englishColIndex).join(', ')}`);
       }
       
-      // ENHANCED: Parse data rows with CORRECT structure (one row per slide)
+      console.log(`🌍 Found ${languageColumns.length} language columns:`, languageColumns.map(l => l.name));
+      
+      // SIMPLIFIED: Parse data rows
       const translations: Record<string, Record<string, string>> = {};
-      let validRowCount = 0;
+      let processedRows = 0;
       
       for (let i = 1; i < lines.length; i++) {
         const line = lines[i];
         
-        // Skip instruction/info rows
-        if (line.trim() === '' || 
-            line.toLowerCase().includes('instructions') || 
-            line.toLowerCase().includes('step ') || 
-            line.toLowerCase().includes('info') || 
-            line.toLowerCase().includes('api') ||
-            line.toLowerCase().includes('structure') ||
-            line.toLowerCase().includes('correct') ||
-            line.toLowerCase().includes('wrong')) {
+        // Skip obviously empty or instruction lines
+        if (!line || 
+            line.toLowerCase().includes('instruction') ||
+            line.toLowerCase().includes('step') ||
+            line.toLowerCase().includes('info') ||
+            line.toLowerCase().includes('how to')) {
           continue;
         }
         
         const cells = parseCSVLine(line);
         
-        if (cells.length <= Math.max(slideColumnIndex, englishColumnIndex)) {
-          continue; // Skip incomplete rows
+        if (cells.length < 3) {
+          console.warn(`⚠️ Skipping short row ${i}: ${cells.length} cells`);
+          continue;
         }
         
-        const slideValue = cells[slideColumnIndex]?.trim();
-        const englishText = cells[englishColumnIndex]?.trim();
+        const slideValue = cells[slideColIndex]?.trim();
+        const englishText = cells[englishColIndex]?.trim();
         
         if (!slideValue || !englishText) {
-          continue; // Skip rows without slide number or english text
+          console.warn(`⚠️ Skipping row ${i}: missing slide (${slideValue}) or english (${englishText})`);
+          continue;
         }
         
         // Extract slide number
@@ -166,7 +167,8 @@ export default function XLSXImporter({ onImport }: XLSXImporterProps) {
           if (match) {
             slideNumber = match[1];
           } else {
-            continue; // Skip if no slide number found
+            console.warn(`⚠️ Skipping row ${i}: no slide number in "${slideValue}"`);
+            continue;
           }
         }
         
@@ -176,45 +178,54 @@ export default function XLSXImporter({ onImport }: XLSXImporterProps) {
           translations[slideId] = {};
         }
         
-        // FIXED: Store the English text for this slide
+        // Store English text
         translations[slideId]['originalText'] = englishText;
         
-        // CRITICAL FIX: Extract translations from SEPARATE language columns
+        // Extract translations for each language
+        let hasTranslations = false;
         languageColumns.forEach(({ index, name, code }) => {
           const translation = cells[index]?.trim();
+          
           if (translation && 
+              translation.length > 0 &&
               translation !== englishText && 
               !translation.startsWith('=GOOGLETRANSLATE') &&
-              translation.length > 0) {
+              !translation.toLowerCase().includes('translation')) {
+            
             translations[slideId][code] = translation;
-            console.log(`📝 Slide ${slideNumber} ${name}: "${translation}"`);
+            hasTranslations = true;
+            console.log(`📝 Slide ${slideNumber} ${name}: "${translation.substring(0, 50)}${translation.length > 50 ? '...' : ''}"`);
           }
         });
         
-        validRowCount++;
+        if (hasTranslations) {
+          processedRows++;
+        }
       }
       
-      console.log(`✅ Processed ${validRowCount} slides with CORRECT structure`);
-      console.log(`🌍 Available languages: ${languageColumns.map(l => l.code).join(', ')}`);
+      console.log(`✅ Processed ${processedRows} slides with translations`);
       
-      if (validRowCount === 0) {
-        throw new Error('No valid translation data found. Please check the file has the correct structure.');
+      if (processedRows === 0) {
+        throw new Error('No valid translation data found. Please check that your XLSX has the correct format with actual translations.');
       }
       
       if (Object.keys(translations).length === 0) {
-        throw new Error('No translations extracted. Please verify the XLSX has separate language columns.');
+        throw new Error('No slide translations were extracted. Please verify your file structure.');
       }
       
-      // Call the import callback with processed data
+      // SUCCESS: Call the import callback
+      console.log(`🎉 XLSX import successful: ${Object.keys(translations).length} slides, ${languageColumns.length} languages`);
       onImport(file, translations);
-      
-      console.log(`✅ XLSX import completed with CORRECT structure: ${Object.keys(translations).length} slides, ${languageColumns.length} languages`);
       
     } catch (error) {
       console.error('❌ XLSX processing failed:', error);
-      alert(`Failed to process XLSX file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
+      // Show detailed error to user
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      alert(`Failed to process XLSX file:\n\n${errorMessage}\n\nPlease check the file format and try again.`);
     } finally {
       setIsProcessing(false);
+      
       // Reset file input
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
@@ -222,8 +233,10 @@ export default function XLSXImporter({ onImport }: XLSXImporterProps) {
     }
   };
 
-  // Parse CSV line with proper quote handling
+  // SIMPLIFIED: Parse CSV line with better error handling
   const parseCSVLine = (line: string): string[] => {
+    if (!line) return [];
+    
     const cells: string[] = [];
     let current = '';
     let inQuotes = false;
@@ -259,115 +272,79 @@ export default function XLSXImporter({ onImport }: XLSXImporterProps) {
     return cells;
   };
 
-  // Find column index by multiple possible names
-  const findColumnIndex = (headers: string[], possibleNames: string[]): number => {
+  // SIMPLIFIED: Find slide column
+  const findSlideColumn = (headers: string[]): number => {
+    const slidePatterns = ['slide', 'slides', 'slide number', 'slide_number', 'nr', 'number'];
+    
     for (let i = 0; i < headers.length; i++) {
       const header = headers[i].toLowerCase().trim();
-      if (possibleNames.some(name => name.toLowerCase() === header)) {
+      if (slidePatterns.some(pattern => header === pattern || header.includes(pattern))) {
         return i;
       }
     }
     return -1;
   };
 
-  // ENHANCED: Map language names to codes EXACTLY as shown in user's image
+  // SIMPLIFIED: Find English column
+  const findEnglishColumn = (headers: string[]): number => {
+    const englishPatterns = ['english', 'original', 'original text', 'originaltext', 'source', 'en'];
+    
+    for (let i = 0; i < headers.length; i++) {
+      const header = headers[i].toLowerCase().trim();
+      if (englishPatterns.some(pattern => header === pattern || header.includes(pattern))) {
+        return i;
+      }
+    }
+    return -1;
+  };
+
+  // SIMPLIFIED: Map language names to codes
   const mapLanguageNameToCode = (languageName: string): string | null => {
+    const name = languageName.toLowerCase().trim();
+    
+    // Direct mapping
     const mapping: Record<string, string> = {
-      // EXACT matches from user's image structure showing separate columns
-      'dutch': 'nl',
-      'spanish': 'es', 
-      'portuguese': 'pt',
-      'greek': 'el',
-      'german': 'de',
-      'finnish': 'fi',
-      'swedish': 'sv',
-      'danish': 'da',
-      'norwegian': 'no',
-      'polish': 'pl',
-      'czech': 'cs',
-      'romanian': 'ro',
-      'hungarian': 'hu',
-      'french': 'fr',
-      'italian': 'it',
-      
-      // Additional common mappings
-      'english': 'en',
-      'russian': 'ru',
-      'japanese': 'ja',
-      'korean': 'ko',
-      'chinese': 'zh',
-      'arabic': 'ar',
-      'hindi': 'hi',
-      'turkish': 'tr',
-      'hebrew': 'he',
-      'thai': 'th',
-      'vietnamese': 'vi',
-      'indonesian': 'id',
-      'malay': 'ms',
-      'filipino': 'tl',
-      'ukrainian': 'uk',
-      'lithuanian': 'lt',
-      'latvian': 'lv',
-      'estonian': 'et',
-      'slovenian': 'sl',
-      'croatian': 'hr',
-      'bulgarian': 'bg',
-      'slovak': 'sk',
-      'icelandic': 'is',
-      'maltese': 'mt',
-      'irish': 'ga',
-      'welsh': 'cy',
-      'basque': 'eu',
-      'catalan': 'ca',
-      'galician': 'gl',
-      'belarusian': 'be',
-      'serbian': 'sr',
-      'bosnian': 'bs',
-      'macedonian': 'mk',
-      'georgian': 'ka',
-      'armenian': 'hy',
-      'azerbaijani': 'az',
-      'persian': 'fa',
-      'farsi': 'fa',
-      'swahili': 'sw',
-      'afrikaans': 'af',
-      'amharic': 'am',
-      'bengali': 'bn',
-      'urdu': 'ur',
-      'punjabi': 'pa',
-      'gujarati': 'gu',
-      'tamil': 'ta',
-      'telugu': 'te',
-      'kannada': 'kn',
-      'malayalam': 'ml',
-      
-      // Language codes as-is
-      'nl': 'nl', 'es': 'es', 'pt': 'pt', 'el': 'el', 'de': 'de',
-      'fi': 'fi', 'sv': 'sv', 'da': 'da', 'no': 'no', 'pl': 'pl',
-      'cs': 'cs', 'ro': 'ro', 'hu': 'hu', 'fr': 'fr', 'it': 'it',
-      'ru': 'ru', 'ja': 'ja', 'ko': 'ko', 'zh': 'zh', 'ar': 'ar',
-      'hi': 'hi', 'tr': 'tr', 'he': 'he', 'th': 'th', 'vi': 'vi',
-      
-      // Common alternative spellings
-      'nederland': 'nl', 'nederlands': 'nl', 'holland': 'nl',
-      'spain': 'es', 'espanol': 'es', 'español': 'es',
-      'portugal': 'pt', 'português': 'pt',
-      'greece': 'el', 'ελληνικά': 'el',
-      'deutschland': 'de', 'deutsch': 'de', 'germany': 'de',
-      'suomi': 'fi', 'finland': 'fi',
-      'sverige': 'sv', 'svenska': 'sv', 'sweden': 'sv',
-      'denmark': 'da', 'dansk': 'da',
-      'norway': 'no', 'norsk': 'no',
-      'polska': 'pl', 'polski': 'pl', 'poland': 'pl',
-      'cesky': 'cs', 'czechia': 'cs',
-      'romania': 'ro', 'romana': 'ro',
-      'magyar': 'hu', 'hungary': 'hu',
-      'france': 'fr', 'francais': 'fr', 'français': 'fr',
-      'italia': 'it', 'italiano': 'it', 'italy': 'it'
+      // Common language names
+      'dutch': 'nl', 'nederlands': 'nl', 'holland': 'nl', 'nl': 'nl',
+      'spanish': 'es', 'español': 'es', 'espanol': 'es', 'es': 'es',
+      'french': 'fr', 'français': 'fr', 'francais': 'fr', 'fr': 'fr',
+      'german': 'de', 'deutsch': 'de', 'de': 'de',
+      'italian': 'it', 'italiano': 'it', 'it': 'it',
+      'portuguese': 'pt', 'português': 'pt', 'pt': 'pt',
+      'polish': 'pl', 'polski': 'pl', 'pl': 'pl',
+      'russian': 'ru', 'русский': 'ru', 'ru': 'ru',
+      'japanese': 'ja', '日本語': 'ja', 'ja': 'ja',
+      'korean': 'ko', '한국어': 'ko', 'ko': 'ko',
+      'chinese': 'zh', '中文': 'zh', 'zh': 'zh',
+      'arabic': 'ar', 'العربية': 'ar', 'ar': 'ar',
+      'hindi': 'hi', 'हिन्दी': 'hi', 'hi': 'hi',
+      'greek': 'el', 'ελληνικά': 'el', 'el': 'el',
+      'turkish': 'tr', 'türkçe': 'tr', 'tr': 'tr',
+      'swedish': 'sv', 'svenska': 'sv', 'sv': 'sv',
+      'norwegian': 'no', 'norsk': 'no', 'no': 'no',
+      'danish': 'da', 'dansk': 'da', 'da': 'da',
+      'finnish': 'fi', 'suomi': 'fi', 'fi': 'fi',
+      'czech': 'cs', 'čeština': 'cs', 'cs': 'cs',
+      'hungarian': 'hu', 'magyar': 'hu', 'hu': 'hu',
+      'romanian': 'ro', 'română': 'ro', 'ro': 'ro',
+      'bulgarian': 'bg', 'български': 'bg', 'bg': 'bg',
+      'croatian': 'hr', 'hrvatski': 'hr', 'hr': 'hr',
+      'slovak': 'sk', 'slovenčina': 'sk', 'sk': 'sk',
+      'slovenian': 'sl', 'slovenščina': 'sl', 'sl': 'sl',
+      'lithuanian': 'lt', 'lietuvių': 'lt', 'lt': 'lt',
+      'latvian': 'lv', 'latviešu': 'lv', 'lv': 'lv',
+      'estonian': 'et', 'eesti': 'et', 'et': 'et',
+      'ukrainian': 'uk', 'українська': 'uk', 'uk': 'uk',
+      'vietnamese': 'vi', 'tiếng việt': 'vi', 'vi': 'vi',
+      'thai': 'th', 'ไทย': 'th', 'th': 'th',
+      'hebrew': 'he', 'עברית': 'he', 'he': 'he',
+      'persian': 'fa', 'فارسی': 'fa', 'farsi': 'fa', 'fa': 'fa',
+      'indonesian': 'id', 'bahasa indonesia': 'id', 'id': 'id',
+      'malay': 'ms', 'bahasa melayu': 'ms', 'ms': 'ms',
+      'filipino': 'tl', 'tagalog': 'tl', 'tl': 'tl'
     };
     
-    const key = languageName.toLowerCase().trim();
-    return mapping[key] || null;
+    return mapping[name] || null;
   };
 
   const handleButtonClick = () => {
@@ -420,7 +397,7 @@ export default function XLSXImporter({ onImport }: XLSXImporterProps) {
               }
             </p>
             <p className="text-gray-500 text-xs">
-              Expected: Slide | English | Dutch | Spanish | French...
+              Simple format: Slide | English | Target Language
             </p>
           </div>
           
@@ -437,39 +414,30 @@ export default function XLSXImporter({ onImport }: XLSXImporterProps) {
         </div>
       </div>
       
-      {/* ENHANCED: Instructions with CORRECT format example */}
+      {/* SIMPLIFIED: Instructions */}
       <div className="p-4 bg-blue-500/10 rounded border border-blue-500/20">
         <div className="flex items-start gap-2">
           <CheckCircle className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
           <div className="text-blue-300 text-sm">
-            <p className="font-medium mb-1">✅ CORRECT XLSX Structure:</p>
+            <p className="font-medium mb-1">✅ Simple XLSX Format:</p>
             <ul className="text-xs space-y-1 text-blue-200">
-              <li>• Column A: <strong>Slide</strong> (slide numbers: 1, 2, 3...)</li>
-              <li>• Column B: <strong>English</strong> (original text)</li>
-              <li>• Column C: <strong>Dutch</strong> (translated text)</li>
-              <li>• Column D: <strong>Spanish</strong> (translated text)</li>
-              <li>• Column E: <strong>French</strong> (translated text), etc.</li>
-              <li>• Each language in its own column - ONE row per slide</li>
+              <li>• Column A: <strong>Slide</strong> (numbers: 1, 2, 3...)</li>
+              <li>• Column B: <strong>English</strong> (all original text for the slide)</li>
+              <li>• Column C: <strong>Target Language</strong> (all translated text for the slide)</li>
+              <li>• One row per slide</li>
+              <li>• All text from one slide goes in one cell per language</li>
             </ul>
           </div>
         </div>
       </div>
       
-      {/* ENHANCED: Warning with WRONG format example */}
-      <div className="p-3 bg-red-500/10 rounded border border-red-500/20">
+      {/* Warning */}
+      <div className="p-3 bg-yellow-500/10 rounded border border-yellow-500/20">
         <div className="flex items-start gap-2">
-          <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
-          <div className="text-red-300 text-xs">
-            <p className="font-medium mb-1">❌ WRONG Format (will be rejected):</p>
-            <ul className="space-y-1 text-red-200">
-              <li>• Headers like "Slide.English.Italian" in one cell</li>
-              <li>• Multiple languages combined in single column</li>
-              <li>• Merged cells or complex formatting</li>
-              <li>• Missing separate language columns</li>
-            </ul>
-            <p className="mt-2 font-medium">
-              ✅ Use separate columns for each language as shown above!
-            </p>
+          <AlertCircle className="w-4 h-4 text-yellow-400 mt-0.5 flex-shrink-0" />
+          <div className="text-yellow-300 text-xs">
+            <strong>Important:</strong> Each slide should be one row. Put all English text from that slide in one cell, 
+            and all translated text in the corresponding language cell.
           </div>
         </div>
       </div>
