@@ -7,44 +7,58 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
-      '@/components': path.resolve(__dirname, './components'),
-      '@/hooks': path.resolve(__dirname, './hooks'),  
-      '@/services': path.resolve(__dirname, './services'),
-      '@/styles': path.resolve(__dirname, './styles')
-    }
+      "@": path.resolve(__dirname, "./"),
+    },
   },
-  css: {
-    postcss: './postcss.config.js',
-    preprocessorOptions: {
-      css: {
-        charset: false
-      }
-    }
+  define: {
+    global: 'globalThis',
   },
   build: {
-    target: 'esnext',
-    minify: 'terser',
+    target: 'es2015',
+    outDir: 'dist',
     sourcemap: false,
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: false,
+        drop_debugger: true,
+      },
+      format: {
+        comments: false,
+      },
+    },
     rollupOptions: {
+      external: [],
       output: {
         manualChunks: {
           'react-vendor': ['react', 'react-dom'],
-          'ui-vendor': ['lucide-react'],
-          'jszip-vendor': ['jszip']
-        }
-      }
-    }
+          'ui-vendor': ['lucide-react', '@radix-ui/react-slot'],
+          'xlsx-vendor': ['xlsx']
+        },
+        chunkFileNames: 'assets/[name]-[hash].js',
+        entryFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash].[ext]'
+      },
+    },
+    chunkSizeWarningLimit: 1000,
   },
   optimizeDeps: {
-    include: ['jszip', 'react', 'react-dom']
+    include: [
+      'react',
+      'react-dom',
+      'lucide-react',
+      'clsx',
+      'tailwind-merge',
+      'class-variance-authority',
+      'jszip',
+      'xlsx'
+    ],
   },
   server: {
     port: 3000,
-    host: true
+    host: true,
   },
-  define: {
-    // Ensure process.env is available if needed
-    'process.env': {}
-  }
+  preview: {
+    port: 4173,
+  },
 })
