@@ -13,18 +13,17 @@ export default function FileUploader({ onFileSelect, disabled = false }: FileUpl
   const [error, setError] = useState<string>('');
 
   const validateFile = (file: File): { isValid: boolean; error?: string } => {
-    // Check file type
+    // Check file type - only .pptx supported for real processing
     const validTypes = [
-      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-      'application/vnd.ms-powerpoint'
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation'
     ];
     
-    const isValidExtension = file.name.toLowerCase().endsWith('.pptx') || file.name.toLowerCase().endsWith('.ppt');
+    const isValidExtension = file.name.toLowerCase().endsWith('.pptx');
     
     if (!validTypes.includes(file.type) && !isValidExtension) {
       return {
         isValid: false,
-        error: 'Please select a valid PowerPoint file (.pptx or .ppt)'
+        error: 'Please select a valid PowerPoint file (.pptx format only)'
       };
     }
 
@@ -134,7 +133,7 @@ export default function FileUploader({ onFileSelect, disabled = false }: FileUpl
         <input
           id="file-input"
           type="file"
-          accept=".pptx,.ppt,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint"
+          accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation"
           onChange={handleFileInput}
           className="hidden"
           disabled={disabled}
@@ -173,7 +172,7 @@ export default function FileUploader({ onFileSelect, disabled = false }: FileUpl
                 {dragActive ? 'Drop your PPTX file here' : 'Choose or drag PPTX file'}
               </p>
               <p className="text-gray-400 text-sm">
-                Supports .pptx and .ppt files up to 100MB
+                Supports .pptx files up to 100MB with REAL text extraction
               </p>
             </>
           )}
@@ -220,7 +219,7 @@ export default function FileUploader({ onFileSelect, disabled = false }: FileUpl
               <div>
                 <p className="text-green-400 font-medium">{selectedFile.name}</p>
                 <p className="text-green-300 text-sm">
-                  Size: {formatFileSize(selectedFile.size)} • Ready for translation
+                  Size: {formatFileSize(selectedFile.size)} • Ready for processing
                 </p>
               </div>
             </div>
@@ -231,9 +230,11 @@ export default function FileUploader({ onFileSelect, disabled = false }: FileUpl
 
       {/* Upload Instructions */}
       <div className="text-xs text-gray-500 space-y-1">
-        <p>✅ Supports PowerPoint 2007+ (.pptx) and legacy (.ppt) formats</p>
+        <p>✅ Supports PowerPoint 2007+ (.pptx format only)</p>
         <p>🔒 Files are processed securely and not stored permanently</p>
-        <p>⚡ Large files (15MB+) may take a few minutes to process</p>
+        <p>⚡ Large files (50MB+) may take a few minutes to process</p>
+        <p>🔧 Preserves original formatting and file structure</p>
+        <p>✨ Up to 100MB files with REAL text extraction</p>
       </div>
     </div>
   );

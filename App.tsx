@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Download, Globe, FileText, CheckCircle, Clock, AlertCircle, Languages, FileSpreadsheet, Settings, Cpu, Zap } from 'lucide-react';
+import { Upload, Download, Globe, FileText, CheckCircle, Clock, AlertCircle, Languages, FileSpreadsheet, Settings, Cpu, Zap, PlayCircle } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Card } from './components/ui/card';
 import { Progress } from './components/ui/progress';
@@ -18,7 +18,7 @@ type TranslationJob = {
   fileName: string;
   sourceFile: File;
   selectedLanguages: string[];
-  status: 'pending' | 'extracting' | 'translating' | 'rebuilding' | 'completed' | 'error';
+  status: 'ready' | 'pending' | 'extracting' | 'translating' | 'rebuilding' | 'completed' | 'error';
   progress: number;
   currentStep?: string;
   results?: TranslationResult[];
@@ -26,6 +26,7 @@ type TranslationJob = {
   sheetId?: string;
   importedTranslations?: any;
   usingImportedTranslations?: boolean;
+  isSetupComplete?: boolean;
 };
 
 // Expanded language list - no limits!
@@ -122,6 +123,7 @@ export default function App() {
   const [apiStatus, setApiStatus] = useState<any>(null);
   const [importedTranslations, setImportedTranslations] = useState<any>(null);
   const [importedFileName, setImportedFileName] = useState<string>('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const { t, currentLanguage, changeLanguage } = useTranslation();
   
   // Mouse tracking for animations
@@ -217,49 +219,103 @@ export default function App() {
     console.log('🗑️ Cleared imported REAL translations');
   };
   
-  const addTranslationJob = async (file: File) => {
-    // Check if languages are selected
+  // Handle file selection - just store the file, don't start processing yet
+  const handleFileSelect = (file: File) => {
+    setSelectedFile(file);
+    console.log(`📁 File selected: ${file.name} (${Math.round(file.size/(1024*1024))}MB)`);
+  };
+
+  // Create a setup for translation - this prepares everything but doesn't start translation
+  const createTranslationSetup = () => {
+    if (!selectedFile) {
+      alert('Please select a PPTX file first.');
+      return;
+    }
+
     if (selectedLanguages.length === 0) {
       alert(t('selectAtLeastOneLanguage') || 'Please select at least one target language.');
       return;
     }
 
-    // Check if already processing
-    if (isProcessing) {
-      alert('Please wait for the current REAL translation to complete before starting a new one.');
-      return;
-    }
-
     const usingImported = !!importedTranslations;
     
-    console.log(`🎯 Starting REAL translation job for: ${file.name} (${Math.round(file.size/(1024*1024))}MB)`);
+    console.log(`🎯 Creating translation setup for: ${selectedFile.name}`);
     console.log(`🌍 Target languages: ${selectedLanguages.join(', ')}`);
     
-    if (usingImported) {
-      console.log(`📊 Using imported translations from: ${importedFileName}`);
-      console.log(`📋 Slides with REAL translations: ${Object.keys(importedTranslations).length}`);
-    }
-    
-    // Create REAL job
+    // Create setup job
     const newJob: TranslationJob = {
       id: Date.now().toString(),
-      fileName: file.name,
-      sourceFile: file,
+      fileName: selectedFile.name,
+      sourceFile: selectedFile,
       selectedLanguages: [...selectedLanguages],
-      status: 'pending',
+      status: 'ready',
       progress: 0,
       importedTranslations: importedTranslations,
-      usingImportedTranslations: usingImported
+      usingImportedTranslations: usingImported,
+      isSetupComplete: true
     };
     
     setJobs(prev => [...prev, newJob]);
+    
+    // Clear the form
+    setSelectedFile(null);
+    // Keep languages selected for convenience
+  };
+
+  // Start translation for specific language
+  const startTranslationForLanguage = async (job: TranslationJob, language: string) => {
+    if (isProcessing) {
+      alert('Please wait for the current translation to complete.');
+      return;
+    }
+
     setIsProcessing(true);
     
     try {
-      await startRealTranslation(newJob.id, file, selectedLanguages, importedTranslations);
+      console.log(`🚀 Starting translation for ${language} in job ${job.id}`);
+      
+      // Update job status
+      updateJob(job.id, {
+        status: 'pending',
+        progress: 0,
+        currentStep: `Starting ${language.toUpperCase()} translation...`
+      });
+
+      await startRealTranslation(job.id, job.sourceFile, [language], job.importedTranslations);
     } catch (error) {
-      console.error('❌ REAL translation job failed:', error);
-      updateJob(newJob.id, {
+      console.error('❌ Translation failed:', error);
+      updateJob(job.id, {
+        status: 'error',
+        error: error instanceof Error ? error.message : 'Translation failed'
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Start translation for all languages
+  const startTranslationForAllLanguages = async (job: TranslationJob) => {
+    if (isProcessing) {
+      alert('Please wait for the current translation to complete.');
+      return;
+    }
+
+    setIsProcessing(true);
+    
+    try {
+      console.log(`🚀 Starting translation for all languages in job ${job.id}`);
+      
+      // Update job status
+      updateJob(job.id, {
+        status: 'pending',
+        progress: 0,
+        currentStep: `Starting translation for ${job.selectedLanguages.length} languages...`
+      });
+
+      await startRealTranslation(job.id, job.sourceFile, job.selectedLanguages, job.importedTranslations);
+    } catch (error) {
+      console.error('❌ Translation failed:', error);
+      updateJob(job.id, {
         status: 'error',
         error: error instanceof Error ? error.message : 'Translation failed'
       });
@@ -506,13 +562,9 @@ export default function App() {
                 </Badge>
               </div>
               <FileUploader 
-                onFileSelect={(file) => addTranslationJob(file)}
+                onFileSelect={handleFileSelect}
                 disabled={isProcessing}
               />
-              <div className="mt-3 text-xs text-gray-500">
-                <p>✨ Supports up to 100MB files with REAL text extraction</p>
-                <p>🔧 Preserves original formatting and file structure</p>
-              </div>
             </Card>
 
             {/* Enhanced Language Selection */}
@@ -539,6 +591,33 @@ export default function App() {
               />
             </Card>
           </div>
+
+          {/* Setup Button */}
+          {selectedFile && selectedLanguages.length > 0 && (
+            <Card className="p-6 bg-black/40 backdrop-blur-sm border-green-500/20 border shadow-2xl">
+              <div className="text-center">
+                <h3 className="text-lg font-serif text-white mb-3">Ready to Setup Translation</h3>
+                <div className="flex items-center justify-center gap-4 mb-4">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-blue-400" />
+                    <span className="text-sm text-gray-300">{selectedFile.name}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Languages className="w-4 h-4 text-purple-400" />
+                    <span className="text-sm text-gray-300">{selectedLanguages.length} languages selected</span>
+                  </div>
+                </div>
+                <Button
+                  onClick={createTranslationSetup}
+                  disabled={isProcessing}
+                  className="bg-green-500/20 border-green-500/30 text-green-400 hover:bg-green-500/30 border"
+                >
+                  <PlayCircle className="w-4 h-4 mr-2" />
+                  Setup Translation Project
+                </Button>
+              </div>
+            </Card>
+          )}
 
           {/* Enhanced XLSX Import Status */}
           {importedTranslations && (
@@ -604,42 +683,150 @@ export default function App() {
           {jobs.length > 0 && (
             <Card className="p-6 bg-black/40 backdrop-blur-sm border-white/10 border shadow-2xl">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-serif text-white">{t('translationStatus') || 'Translation Status'}</h2>
+                <h2 className="text-xl font-serif text-white">{t('translationProjects') || 'Translation Projects'}</h2>
                 <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30 px-2 py-1 text-xs">
                   <Zap className="w-3 h-3 mr-1" />
-                  REAL Processing
+                  {jobs.length} Projects
                 </Badge>
               </div>
-              <div className="space-y-4">
+              <div className="space-y-6">
                 {jobs.map(job => (
-                  <div key={job.id} className="relative">
-                    <TranslationProgress 
-                      job={job}
-                      onDownload={handleDownload}
-                      onDownloadAll={handleDownloadAll}
-                    />
-                    
-                    {/* Enhanced XLSX Download Button */}
-                    {job.status === 'completed' && !job.usingImportedTranslations && (
-                      <div className="mt-3 flex justify-center">
-                        <Button
-                          onClick={() => handleDownloadXLSX(job)}
-                          variant="outline"
-                          size="sm"
-                          className="bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20"
-                        >
-                          <FileSpreadsheet className="w-4 h-4 mr-2" />
-                          Download REAL Translation Sheet (XLSX)
-                        </Button>
+                  <div key={job.id} className="relative border border-white/10 rounded-lg p-4">
+                    {/* Job Header */}
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="text-lg font-medium text-white">{job.fileName}</h3>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Badge className={`text-xs ${
+                            job.status === 'ready' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
+                            job.status === 'completed' ? 'bg-green-500/20 text-green-300 border-green-500/30' :
+                            job.status === 'error' ? 'bg-red-500/20 text-red-300 border-red-500/30' :
+                            'bg-yellow-500/20 text-yellow-300 border-yellow-500/30'
+                          }`}>
+                            {job.status === 'ready' ? 'Ready' : 
+                             job.status === 'completed' ? 'Completed' :
+                             job.status === 'error' ? 'Error' : 'Processing'
+                            }
+                          </Badge>
+                          <span className="text-sm text-gray-400">
+                            {job.selectedLanguages.length} languages
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Ready State - Show Generate Buttons */}
+                    {job.status === 'ready' && (
+                      <div className="space-y-4">
+                        <div className="flex flex-wrap gap-2">
+                          {job.selectedLanguages.map(langCode => {
+                            const lang = AVAILABLE_LANGUAGES.find(l => l.code === langCode);
+                            return lang ? (
+                              <Button
+                                key={langCode}
+                                onClick={() => startTranslationForLanguage(job, langCode)}
+                                disabled={isProcessing}
+                                size="sm"
+                                className="bg-purple-500/20 border-purple-500/30 text-purple-300 hover:bg-purple-500/30 border"
+                              >
+                                <span className="mr-2">{lang.flag}</span>
+                                Generate {lang.name}
+                              </Button>
+                            ) : null;
+                          })}
+                        </div>
+                        
+                        <div className="pt-4 border-t border-white/10">
+                          <Button
+                            onClick={() => startTranslationForAllLanguages(job)}
+                            disabled={isProcessing}
+                            className="bg-green-500/20 border-green-500/30 text-green-400 hover:bg-green-500/30 border"
+                          >
+                            <Zap className="w-4 h-4 mr-2" />
+                            Generate All Languages
+                          </Button>
+                        </div>
                       </div>
                     )}
-                    
+
+                    {/* Processing State */}
+                    {['pending', 'extracting', 'translating', 'rebuilding'].includes(job.status) && (
+                      <TranslationProgress 
+                        job={job}
+                        onDownload={handleDownload}
+                        onDownloadAll={handleDownloadAll}
+                      />
+                    )}
+
+                    {/* Completed State */}
+                    {job.status === 'completed' && job.results && (
+                      <div className="space-y-4">
+                        <div className="grid gap-3">
+                          {job.results.map(result => (
+                            <div key={result.language} className="flex items-center justify-between p-3 bg-green-500/10 border border-green-500/20 rounded">
+                              <div className="flex items-center gap-3">
+                                <span className="text-lg">
+                                  {AVAILABLE_LANGUAGES.find(l => l.code === result.language)?.flag}
+                                </span>
+                                <div>
+                                  <p className="text-green-400 font-medium">
+                                    {AVAILABLE_LANGUAGES.find(l => l.code === result.language)?.name}
+                                  </p>
+                                  <p className="text-green-300 text-sm">
+                                    {result.fileName} ({Math.round((result.size || 0)/1024)}KB)
+                                  </p>
+                                </div>
+                              </div>
+                              <Button
+                                onClick={() => handleDownload(job, result.language)}
+                                size="sm"
+                                className="bg-green-500/20 border-green-500/30 text-green-400 hover:bg-green-500/30 border"
+                              >
+                                <Download className="w-4 h-4 mr-1" />
+                                Download
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                        
+                        <div className="pt-4 border-t border-white/10 flex gap-3">
+                          <Button
+                            onClick={() => handleDownloadAll(job)}
+                            className="bg-blue-500/20 border-blue-500/30 text-blue-400 hover:bg-blue-500/30 border"
+                          >
+                            <Download className="w-4 h-4 mr-2" />
+                            Download All Files
+                          </Button>
+                          
+                          {!job.usingImportedTranslations && (
+                            <Button
+                              onClick={() => handleDownloadXLSX(job)}
+                              variant="outline"
+                              className="bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20"
+                            >
+                              <FileSpreadsheet className="w-4 h-4 mr-2" />
+                              Download XLSX
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Error State */}
+                    {job.status === 'error' && (
+                      <div className="p-3 bg-red-500/10 border border-red-500/20 rounded">
+                        <p className="text-red-400 text-sm">
+                          {job.error || 'An unknown error occurred'}
+                        </p>
+                      </div>
+                    )}
+
                     {/* Show enhanced imported translation info */}
                     {job.usingImportedTranslations && (
-                      <div className="mt-2 p-2 bg-green-500/10 rounded border border-green-500/20">
+                      <div className="mt-3 p-2 bg-green-500/10 rounded border border-green-500/20">
                         <p className="text-green-300 text-xs flex items-center gap-1">
                           <CheckCircle className="w-3 h-3" />
-                          Generated using REAL imported translations with preserved formatting
+                          Using imported translations with preserved formatting
                         </p>
                       </div>
                     )}
@@ -647,27 +834,6 @@ export default function App() {
                 ))}
               </div>
             </Card>
-          )}
-
-          {/* Enhanced Results */}
-          {jobs.some(job => job.status === 'completed') && (
-            <div className="relative">
-              <div className="absolute -inset-1 bg-gradient-to-r from-green-500/20 via-emerald-500/20 to-cyan-500/20 rounded-xl blur opacity-75 animate-success-glow"></div>
-              <Card className="relative p-6 bg-black/40 backdrop-blur-sm border-white/10 border shadow-2xl">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-serif text-white">{t('downloadResults') || 'Download Results'}</h2>
-                  <Badge className="bg-green-500/20 text-green-300 border-green-500/30 px-2 py-1 text-xs">
-                    <CheckCircle className="w-3 h-3 mr-1" />
-                    REAL Files Ready
-                  </Badge>
-                </div>
-                <ResultsSection 
-                  jobs={jobs.filter(job => job.status === 'completed')}
-                  onDownload={handleDownload}
-                  onDownloadAll={handleDownloadAll}
-                />
-              </Card>
-            </div>
           )}
 
           {/* Enhanced Features */}
