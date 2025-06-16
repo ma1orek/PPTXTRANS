@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Download, Globe, FileText, CheckCircle, Clock, AlertCircle, Languages, FileSpreadsheet, Settings, Cpu, Zap, PlayCircle } from 'lucide-react';
+import { Upload, Download, Globe, FileText, CheckCircle, Clock, AlertCircle, Languages, FileSpreadsheet, Settings, Cpu, Zap, PlayCircle, Eye, Trash2 } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Card } from './components/ui/card';
 import { Progress } from './components/ui/progress';
@@ -27,6 +27,7 @@ type TranslationJob = {
   importedTranslations?: any;
   usingImportedTranslations?: boolean;
   isSetupComplete?: boolean;
+  availableImportedLanguages?: string[]; // NEW: Track which languages are available from import
 };
 
 // Expanded language list - no limits!
@@ -123,6 +124,7 @@ export default function App() {
   const [apiStatus, setApiStatus] = useState<any>(null);
   const [importedTranslations, setImportedTranslations] = useState<any>(null);
   const [importedFileName, setImportedFileName] = useState<string>('');
+  const [importedLanguages, setImportedLanguages] = useState<string[]>([]); // NEW: Track imported languages
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const { t, currentLanguage, changeLanguage } = useTranslation();
   
@@ -175,7 +177,7 @@ export default function App() {
     return () => clearTimeout(timeoutId);
   }, []);
 
-  // Handle XLSX import (integrated with language selection)
+  // ENHANCED: Handle XLSX import with better language detection
   const handleXLSXImport = (file: File, translations: any) => {
     try {
       console.log('📊 XLSX imported with REAL translations:', translations);
@@ -184,30 +186,148 @@ export default function App() {
       setImportedTranslations(translations);
       setImportedFileName(file.name);
       
-      // Auto-detect and select languages from imported data
-      const firstSlideTranslations = Object.values(translations)[0] as Record<string, string>;
-      const importedLanguages = Object.keys(firstSlideTranslations);
+      // Enhanced language detection
+      const detectedLanguages = new Set<string>();
       
-      // Map to our language codes
-      const mappedLanguages = importedLanguages
-        .map(lang => {
+      // Check each slide's translations to find available languages
+      Object.values(translations).forEach((slideTranslations: any) => {
+        if (slideTranslations && typeof slideTranslations === 'object') {
+          Object.keys(slideTranslations).forEach(lang => {
+            detectedLanguages.add(lang.toLowerCase());
+          });
+        }
+      });
+      
+      console.log('🔍 Detected languages in XLSX:', Array.from(detectedLanguages));
+      
+      // Map detected languages to our language codes
+      const mappedLanguages: string[] = [];
+      const languageMapping: Record<string, string> = {
+        // Direct code matches
+        'pl': 'pl', 'polish': 'pl',
+        'es': 'es', 'spanish': 'es', 'espanol': 'es',
+        'fr': 'fr', 'french': 'fr', 'francais': 'fr',
+        'de': 'de', 'german': 'de', 'deutsch': 'de',
+        'it': 'it', 'italian': 'it',
+        'pt': 'pt', 'portuguese': 'pt',
+        'ru': 'ru', 'russian': 'ru',
+        'ja': 'ja', 'japanese': 'ja',
+        'ko': 'ko', 'korean': 'ko',
+        'zh': 'zh', 'chinese': 'zh',
+        'ar': 'ar', 'arabic': 'ar',
+        'hi': 'hi', 'hindi': 'hi',
+        'nl': 'nl', 'dutch': 'nl',
+        'sv': 'sv', 'swedish': 'sv',
+        'no': 'no', 'norwegian': 'no',
+        'da': 'da', 'danish': 'da',
+        'fi': 'fi', 'finnish': 'fi'
+      };
+      
+      detectedLanguages.forEach(lang => {
+        const langKey = lang.toLowerCase();
+        const mappedCode = languageMapping[langKey];
+        
+        if (mappedCode && !mappedLanguages.includes(mappedCode)) {
+          mappedLanguages.push(mappedCode);
+        } else {
+          // Try to find by name match
           const found = AVAILABLE_LANGUAGES.find(
-            avail => avail.name.toLowerCase() === lang.toLowerCase() ||
-                     avail.code.toLowerCase() === lang.toLowerCase()
+            avail => avail.name.toLowerCase() === langKey ||
+                     avail.code.toLowerCase() === langKey
           );
-          return found?.code;
-        })
-        .filter(Boolean) as string[];
+          if (found && !mappedLanguages.includes(found.code)) {
+            mappedLanguages.push(found.code);
+          }
+        }
+      });
       
+      console.log('✅ Mapped languages:', mappedLanguages);
+      
+      // Set imported languages and auto-select them
+      setImportedLanguages(mappedLanguages);
+      setSelectedLanguages(mappedLanguages);
+      
+      // Show success notification
       if (mappedLanguages.length > 0) {
-        setSelectedLanguages(mappedLanguages);
-        console.log(`✅ Auto-selected ${mappedLanguages.length} languages from REAL XLSX:`, mappedLanguages);
+        console.log(`✅ Auto-selected ${mappedLanguages.length} languages from XLSX:`, mappedLanguages);
+        
+        // Create success notification
+        const notification = document.createElement('div');
+        notification.innerHTML = `
+          <div style="
+            position: fixed; 
+            top: 20px; 
+            right: 20px; 
+            background: rgba(34, 197, 94, 0.95); 
+            color: white; 
+            padding: 16px; 
+            border-radius: 8px; 
+            max-width: 350px; 
+            z-index: 9999;
+            font-family: system-ui, -apple-system, sans-serif;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            backdrop-filter: blur(10px);
+          ">
+            <div style="font-weight: bold; margin-bottom: 8px;">📊 XLSX Import Success!</div>
+            <div style="font-size: 14px; opacity: 0.9;">
+              Found ${mappedLanguages.length} languages:<br>
+              <strong>${mappedLanguages.map(code => 
+                AVAILABLE_LANGUAGES.find(l => l.code === code)?.name || code
+              ).join(', ')}</strong>
+            </div>
+            <div style="font-size: 12px; margin-top: 8px; opacity: 0.8;">
+              Languages auto-selected for generation
+            </div>
+          </div>
+        `;
+        
+        document.body.appendChild(notification);
+        setTimeout(() => {
+          if (notification.parentNode) {
+            notification.parentNode.removeChild(notification);
+          }
+        }, 6000);
       } else {
-        console.warn('⚠️ No matching languages found in XLSX, keeping current selection');
+        console.warn('⚠️ No recognizable languages found in XLSX');
+        
+        // Show warning notification
+        const notification = document.createElement('div');
+        notification.innerHTML = `
+          <div style="
+            position: fixed; 
+            top: 20px; 
+            right: 20px; 
+            background: rgba(245, 158, 11, 0.95); 
+            color: white; 
+            padding: 16px; 
+            border-radius: 8px; 
+            max-width: 350px; 
+            z-index: 9999;
+            font-family: system-ui, -apple-system, sans-serif;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            backdrop-filter: blur(10px);
+          ">
+            <div style="font-weight: bold; margin-bottom: 8px;">⚠️ XLSX Import Warning</div>
+            <div style="font-size: 14px; opacity: 0.9;">
+              Could not detect languages in XLSX.<br>
+              Please select target languages manually.
+            </div>
+            <div style="font-size: 12px; margin-top: 8px; opacity: 0.8;">
+              Languages found: ${Array.from(detectedLanguages).join(', ')}
+            </div>
+          </div>
+        `;
+        
+        document.body.appendChild(notification);
+        setTimeout(() => {
+          if (notification.parentNode) {
+            notification.parentNode.removeChild(notification);
+          }
+        }, 8000);
       }
       
     } catch (error) {
-      console.error('❌ Error processing REAL XLSX import:', error);
+      console.error('❌ Error processing XLSX import:', error);
       alert('Failed to process XLSX file. Please check the format and try again.');
     }
   };
@@ -216,6 +336,7 @@ export default function App() {
   const clearImportedTranslations = () => {
     setImportedTranslations(null);
     setImportedFileName('');
+    setImportedLanguages([]);
     console.log('🗑️ Cleared imported REAL translations');
   };
   
@@ -252,7 +373,8 @@ export default function App() {
       progress: 0,
       importedTranslations: importedTranslations,
       usingImportedTranslations: usingImported,
-      isSetupComplete: true
+      isSetupComplete: true,
+      availableImportedLanguages: usingImported ? [...importedLanguages] : undefined // NEW: Store available languages
     };
     
     setJobs(prev => [...prev, newJob]);
@@ -408,7 +530,7 @@ export default function App() {
         await translationService.generateXLSX(job, `${job.fileName}_translations.xlsx`);
       }
     } catch (error) {
-      alert(`Failed to download REAL XLSX: ${error}`);
+      alert(`Failed to download XLSX: ${error}`);
     }
   };
 
@@ -619,13 +741,13 @@ export default function App() {
             </Card>
           )}
 
-          {/* Enhanced XLSX Import Status */}
+          {/* ENHANCED: XLSX Import Status with Language Details */}
           {importedTranslations && (
-            <Card className="p-4 bg-black/40 backdrop-blur-sm border-green-500/20">
-              <div className="flex items-center justify-between mb-3">
+            <Card className="p-6 bg-black/40 backdrop-blur-sm border-green-500/20 border shadow-2xl">
+              <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <FileSpreadsheet className="w-4 h-4 text-green-400" />
-                  <h3 className="text-green-400">Using REAL Imported Translations</h3>
+                  <FileSpreadsheet className="w-5 h-5 text-green-400" />
+                  <h3 className="text-green-400 text-lg font-medium">Imported Translations Ready</h3>
                 </div>
                 <Button
                   onClick={clearImportedTranslations}
@@ -633,35 +755,57 @@ export default function App() {
                   size="sm"
                   className="bg-gray-500/10 border-gray-500/30 text-gray-400 hover:bg-gray-500/20"
                 >
+                  <Trash2 className="w-3 h-3 mr-1" />
                   Clear
                 </Button>
               </div>
               
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-400">File:</span>
-                  <span className="text-white truncate max-w-48">{importedFileName}</span>
+              <div className="grid md:grid-cols-2 gap-4 mb-4">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-400">File:</span>
+                    <span className="text-white truncate max-w-48">{importedFileName}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-400">Slides:</span>
+                    <span className="text-white">{Object.keys(importedTranslations).length}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-400">Languages:</span>
+                    <span className="text-white">{importedLanguages.length}</span>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-400">Slides:</span>
-                  <span className="text-white">{Object.keys(importedTranslations).length}</span>
-                </div>
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {selectedLanguages.map(langCode => {
-                    const lang = AVAILABLE_LANGUAGES.find(l => l.code === langCode);
-                    return lang ? (
-                      <Badge key={langCode} className="bg-green-500/20 text-green-300 border-green-500/30 text-xs">
-                        <span className="mr-1">{lang.flag}</span>
-                        {lang.name}
-                      </Badge>
-                    ) : null;
-                  })}
+                
+                <div className="space-y-2">
+                  <div className="text-sm text-gray-400 mb-2">Available Languages:</div>
+                  <div className="flex flex-wrap gap-1">
+                    {importedLanguages.map(langCode => {
+                      const lang = AVAILABLE_LANGUAGES.find(l => l.code === langCode);
+                      return lang ? (
+                        <Badge key={langCode} className="bg-green-500/20 text-green-300 border-green-500/30 text-xs">
+                          <span className="mr-1">{lang.flag}</span>
+                          {lang.name}
+                        </Badge>
+                      ) : (
+                        <Badge key={langCode} className="bg-gray-500/20 text-gray-300 border-gray-500/30 text-xs">
+                          {langCode.toUpperCase()}
+                        </Badge>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
               
-              <div className="mt-3 p-2 bg-green-500/10 rounded border border-green-500/20">
-                <p className="text-green-300 text-xs">
-                  ✅ Ready to generate REAL PPTX files using your manually corrected translations
+              <div className="p-3 bg-green-500/10 rounded border border-green-500/20">
+                <div className="flex items-center gap-2 mb-2">
+                  <CheckCircle className="w-4 h-4 text-green-400" />
+                  <p className="text-green-300 text-sm font-medium">
+                    Ready to generate PPTX files with your imported translations
+                  </p>
+                </div>
+                <p className="text-green-200 text-xs">
+                  {importedLanguages.length} languages detected and auto-selected. 
+                  Click "Setup Translation Project" to proceed with generation.
                 </p>
               </div>
             </Card>
@@ -711,39 +855,77 @@ export default function App() {
                           <span className="text-sm text-gray-400">
                             {job.selectedLanguages.length} languages
                           </span>
+                          {job.usingImportedTranslations && (
+                            <Badge className="bg-green-500/20 text-green-300 border-green-500/30 text-xs">
+                              <FileSpreadsheet className="w-3 h-3 mr-1" />
+                              Using Imports
+                            </Badge>
+                          )}
                         </div>
                       </div>
                     </div>
 
-                    {/* Ready State - Show Generate Buttons */}
+                    {/* Ready State - Show Generate Buttons with Enhanced Language Info */}
                     {job.status === 'ready' && (
                       <div className="space-y-4">
-                        <div className="flex flex-wrap gap-2">
-                          {job.selectedLanguages.map(langCode => {
-                            const lang = AVAILABLE_LANGUAGES.find(l => l.code === langCode);
-                            return lang ? (
-                              <Button
-                                key={langCode}
-                                onClick={() => startTranslationForLanguage(job, langCode)}
-                                disabled={isProcessing}
-                                size="sm"
-                                className="bg-purple-500/20 border-purple-500/30 text-purple-300 hover:bg-purple-500/30 border"
-                              >
-                                <span className="mr-2">{lang.flag}</span>
-                                Generate {lang.name}
-                              </Button>
-                            ) : null;
-                          })}
+                        {job.usingImportedTranslations && job.availableImportedLanguages && (
+                          <div className="p-3 bg-green-500/10 border border-green-500/20 rounded">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Eye className="w-4 h-4 text-green-400" />
+                              <span className="text-green-400 text-sm font-medium">Available from Import:</span>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {job.availableImportedLanguages.map(langCode => {
+                                const lang = AVAILABLE_LANGUAGES.find(l => l.code === langCode);
+                                return lang ? (
+                                  <Badge key={langCode} className="bg-green-500/20 text-green-300 border-green-500/30 text-xs">
+                                    <span className="mr-1">{lang.flag}</span>
+                                    {lang.name}
+                                  </Badge>
+                                ) : null;
+                              })}
+                            </div>
+                          </div>
+                        )}
+                        
+                        <div className="space-y-3">
+                          <div className="text-sm text-gray-400 mb-2">Generate Individual Languages:</div>
+                          <div className="flex flex-wrap gap-2">
+                            {job.selectedLanguages.map(langCode => {
+                              const lang = AVAILABLE_LANGUAGES.find(l => l.code === langCode);
+                              const isAvailableFromImport = job.availableImportedLanguages?.includes(langCode);
+                              
+                              return lang ? (
+                                <Button
+                                  key={langCode}
+                                  onClick={() => startTranslationForLanguage(job, langCode)}
+                                  disabled={isProcessing}
+                                  size="sm"
+                                  className={`${
+                                    isAvailableFromImport
+                                      ? 'bg-green-500/20 border-green-500/30 text-green-300 hover:bg-green-500/30'
+                                      : 'bg-purple-500/20 border-purple-500/30 text-purple-300 hover:bg-purple-500/30'
+                                  } border`}
+                                >
+                                  <span className="mr-2">{lang.flag}</span>
+                                  Generate {lang.name}
+                                  {isAvailableFromImport && (
+                                    <FileSpreadsheet className="w-3 h-3 ml-1" />
+                                  )}
+                                </Button>
+                              ) : null;
+                            })}
+                          </div>
                         </div>
                         
                         <div className="pt-4 border-t border-white/10">
                           <Button
                             onClick={() => startTranslationForAllLanguages(job)}
                             disabled={isProcessing}
-                            className="bg-green-500/20 border-green-500/30 text-green-400 hover:bg-green-500/30 border"
+                            className="bg-blue-500/20 border-blue-500/30 text-blue-400 hover:bg-blue-500/30 border"
                           >
                             <Zap className="w-4 h-4 mr-2" />
-                            Generate All Languages
+                            Generate All Languages ({job.selectedLanguages.length})
                           </Button>
                         </div>
                       </div>
@@ -789,7 +971,7 @@ export default function App() {
                           ))}
                         </div>
                         
-                        <div className="pt-4 border-t border-white/10 flex gap-3">
+                        <div className="pt-4 border-t border-white/10 flex gap-3 flex-wrap">
                           <Button
                             onClick={() => handleDownloadAll(job)}
                             className="bg-blue-500/20 border-blue-500/30 text-blue-400 hover:bg-blue-500/30 border"
@@ -798,16 +980,14 @@ export default function App() {
                             Download All Files
                           </Button>
                           
-                          {!job.usingImportedTranslations && (
-                            <Button
-                              onClick={() => handleDownloadXLSX(job)}
-                              variant="outline"
-                              className="bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20"
-                            >
-                              <FileSpreadsheet className="w-4 h-4 mr-2" />
-                              Download XLSX
-                            </Button>
-                          )}
+                          <Button
+                            onClick={() => handleDownloadXLSX(job)}
+                            variant="outline"
+                            className="bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20"
+                          >
+                            <FileSpreadsheet className="w-4 h-4 mr-2" />
+                            Download XLSX
+                          </Button>
                         </div>
                       </div>
                     )}
