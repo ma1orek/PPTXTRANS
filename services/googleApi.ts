@@ -1,9 +1,7 @@
 /**
  * Google API Service for PPTX Translator Pro
- * Handles authentication and API calls to Google Drive and Sheets
+ * Handles authentication and API calls to Google Drive and Sheets with GOOGLETRANSLATE integration
  */
-
-import { translationService } from './translationService';
 
 // Types for better error handling and type safety
 interface DriveFileMetadata {
@@ -12,7 +10,7 @@ interface DriveFileMetadata {
   mimeType?: string;
 }
 
-interface DriveUploadResponse {
+export interface DriveUploadResponse {
   id: string;
   name: string;
   size?: string;
@@ -32,6 +30,12 @@ interface SheetsCreateResponse {
       title: string;
     };
   }>;
+}
+
+interface SheetUpdateRequest {
+  range: string;
+  majorDimension: string;
+  values: string[][];
 }
 
 // Simplified environment variable helpers
@@ -63,7 +67,7 @@ const getServiceAccountKey = (): string | null => {
 
 /**
  * Google API Service Class
- * Handles all Google API interactions with proper error handling
+ * Handles all Google API interactions with proper error handling and GOOGLETRANSLATE integration
  */
 class GoogleApiService {
   private accessToken: string | null = null;
@@ -72,7 +76,7 @@ class GoogleApiService {
   private serviceAccountKey: any = null;
 
   constructor() {
-    console.log('🔧 Initializing Google API Service...');
+    console.log('🔧 Initializing Google API Service with GOOGLETRANSLATE support...');
     this.init();
   }
 
@@ -84,7 +88,7 @@ class GoogleApiService {
       const keyString = getServiceAccountKey();
       
       if (!keyString) {
-        console.log('📝 No Google service account key found - using mock mode');
+        console.log('📝 No Google service account key found - using enhanced mock mode');
         this.isInitialized = true;
         return;
       }
@@ -92,7 +96,7 @@ class GoogleApiService {
       // Parse the service account key
       try {
         this.serviceAccountKey = JSON.parse(keyString);
-        console.log('✅ Service account key loaded successfully');
+        console.log('✅ Service account key loaded - GOOGLETRANSLATE support enabled');
         this.isInitialized = true;
       } catch (error) {
         console.error('❌ Failed to parse service account key:', error);
@@ -146,8 +150,8 @@ class GoogleApiService {
       hasAccessToken: !!this.accessToken,
       tokenExpiry: this.tokenExpiry,
       recommendedSetup: hasKey 
-        ? (keyValid ? 'Google API configured correctly' : 'Service account key is invalid - check JSON format')
-        : 'Add VITE_GOOGLE_SERVICE_ACCOUNT_KEY to environment variables',
+        ? (keyValid ? 'Google API configured - GOOGLETRANSLATE available' : 'Service account key is invalid - check JSON format')
+        : 'Add VITE_GOOGLE_SERVICE_ACCOUNT_KEY to enable GOOGLETRANSLATE',
       debugInfo,
       availableEnvVars
     };
@@ -171,7 +175,7 @@ class GoogleApiService {
         return true;
       }
 
-      console.log('🔄 Authenticating with Google APIs...');
+      console.log('🔄 Authenticating with Google APIs for GOOGLETRANSLATE access...');
 
       // Create JWT for service account authentication
       const jwt = await this.createServiceAccountJWT();
@@ -196,7 +200,7 @@ class GoogleApiService {
       this.accessToken = tokenData.access_token;
       this.tokenExpiry = Date.now() + (tokenData.expires_in * 1000);
       
-      console.log('✅ Google API authentication successful');
+      console.log('✅ Google API authentication successful - GOOGLETRANSLATE enabled');
       return true;
 
     } catch (error) {
@@ -315,22 +319,22 @@ class GoogleApiService {
   }
 
   /**
-   * Create Google Sheet with translation data
+   * Create Google Sheet with GOOGLETRANSLATE formulas
    */
-  async createSheet(title: string, data: any): Promise<string> {
+  async createSheet(title: string, data?: string[][]): Promise<string> {
     await this.authenticate();
 
-    console.log(`📊 Creating Google Sheet: ${title}`);
+    console.log(`📊 Creating Google Sheet with GOOGLETRANSLATE support: ${title}`);
 
     try {
       if (this.accessToken?.startsWith('mock_')) {
         // Mock sheet creation
-        console.log('🎭 Mock sheet creation - generating simulated response');
+        console.log('🎭 Mock sheet creation with GOOGLETRANSLATE formulas');
         
         await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 1200));
         
         const mockSheetId = 'mock_sheet_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-        console.log(`✅ Mock sheet created: ${mockSheetId}`);
+        console.log(`✅ Mock sheet created with GOOGLETRANSLATE: ${mockSheetId}`);
         return mockSheetId;
       }
 
@@ -341,7 +345,11 @@ class GoogleApiService {
         },
         sheets: [{
           properties: {
-            title: 'Translations'
+            title: 'Translations',
+            gridProperties: {
+              rowCount: Math.max(1000, (data?.length || 0) + 100),
+              columnCount: Math.max(26, (data?.[0]?.length || 0) + 5)
+            }
           }
         }]
       };
@@ -361,10 +369,12 @@ class GoogleApiService {
 
       const result: SheetsCreateResponse = await response.json();
       
-      // Add data to the sheet
-      await this.updateSheetData(result.spreadsheetId, data);
+      // Add data to the sheet if provided
+      if (data && data.length > 0) {
+        await this.updateSheetData(result.spreadsheetId, 'A1:Z1000', data);
+      }
       
-      console.log(`✅ Successfully created Google Sheet: ${result.spreadsheetId}`);
+      console.log(`✅ Successfully created Google Sheet with GOOGLETRANSLATE: ${result.spreadsheetId}`);
       return result.spreadsheetId;
 
     } catch (error) {
@@ -374,26 +384,30 @@ class GoogleApiService {
   }
 
   /**
-   * Update sheet data with translation content
+   * Update sheet data with values (including GOOGLETRANSLATE formulas)
    */
-  private async updateSheetData(spreadsheetId: string, data: any): Promise<void> {
-    if (this.accessToken?.startsWith('mock_')) {
-      console.log('🎭 Mock sheet data update');
-      return;
-    }
+  async updateSheetData(spreadsheetId: string, range: string, values: string[][]): Promise<void> {
+    await this.authenticate();
+
+    console.log(`📝 Updating sheet data with GOOGLETRANSLATE formulas: ${spreadsheetId}`);
 
     try {
-      // Convert data to sheet format
-      const values = this.convertDataToSheetFormat(data);
+      if (this.accessToken?.startsWith('mock_')) {
+        console.log('🎭 Mock sheet data update with GOOGLETRANSLATE formulas');
+        await new Promise(resolve => setTimeout(resolve, 500));
+        return;
+      }
 
-      const updateRequest = {
+      const updateRequest: SheetUpdateRequest = {
+        range: range,
+        majorDimension: 'ROWS',
         values: values
       };
 
       const response = await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/A1:append?valueInputOption=USER_ENTERED`,
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}?valueInputOption=USER_ENTERED`,
         {
-          method: 'POST',
+          method: 'PUT',
           headers: {
             'Authorization': `Bearer ${this.accessToken}`,
             'Content-Type': 'application/json'
@@ -403,10 +417,11 @@ class GoogleApiService {
       );
 
       if (!response.ok) {
-        throw new Error(`Sheet update failed: ${response.status} ${response.statusText}`);
+        const errorText = await response.text();
+        throw new Error(`Sheet update failed: ${response.status} ${response.statusText} - ${errorText}`);
       }
 
-      console.log('✅ Sheet data updated successfully');
+      console.log(`✅ Sheet data updated with GOOGLETRANSLATE formulas: ${values.length} rows`);
 
     } catch (error) {
       console.error('❌ Sheet data update failed:', error);
@@ -415,92 +430,161 @@ class GoogleApiService {
   }
 
   /**
-   * Convert translation data to Google Sheets format
+   * Batch update sheet with multiple requests (for adding formulas after data)
    */
-  private convertDataToSheetFormat(data: any): string[][] {
-    const rows: string[][] = [];
-    
-    // Add header row
-    rows.push(['Slide', 'Original Text', 'Language', 'Translation']);
-    
-    // Add data rows
-    Object.entries(data).forEach(([slideId, slideData]: [string, any]) => {
-      Object.entries(slideData).forEach(([text, translations]: [string, any]) => {
-        Object.entries(translations).forEach(([lang, translation]: [string, any]) => {
-          rows.push([slideId, text, lang, translation as string]);
-        });
-      });
-    });
-    
-    return rows;
-  }
-
-  /**
-   * Download file from Google Drive
-   */
-  async downloadFromDrive(fileId: string): Promise<Blob> {
+  async batchUpdateSheet(spreadsheetId: string, requests: any[]): Promise<void> {
     await this.authenticate();
 
-    console.log(`📥 Downloading file from Drive: ${fileId}`);
+    console.log(`🔄 Batch updating sheet with GOOGLETRANSLATE formulas: ${spreadsheetId}`);
 
     try {
       if (this.accessToken?.startsWith('mock_')) {
-        // Mock download
-        console.log('🎭 Mock download - generating sample file');
-        await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
-        
-        // Create a mock PPTX file (empty but proper size)
-        const mockContent = new Uint8Array(1024 * 1024 * 2); // 2MB mock file
-        return new Blob([mockContent], { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' });
+        console.log('🎭 Mock batch update with GOOGLETRANSLATE formulas');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return;
       }
 
-      // Real download from Google Drive
-      const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+      const batchRequest = {
+        requests: requests
+      };
+
+      const response = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(batchRequest)
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Batch update failed: ${response.status} ${response.statusText} - ${errorText}`);
+      }
+
+      console.log(`✅ Batch update completed with GOOGLETRANSLATE formulas: ${requests.length} requests`);
+
+    } catch (error) {
+      console.error('❌ Batch update failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get values from Google Sheet (including translated results)
+   */
+  async getSheetValues(spreadsheetId: string, range: string): Promise<string[][]> {
+    await this.authenticate();
+
+    console.log(`📥 Getting sheet values (including GOOGLETRANSLATE results): ${spreadsheetId}`);
+
+    try {
+      if (this.accessToken?.startsWith('mock_')) {
+        console.log('🎭 Mock sheet values with GOOGLETRANSLATE results');
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Return mock translated data
+        return [
+          ['Slide', 'Element', 'Original Text', 'Polish', 'Spanish', 'French'],
+          ['Slide 1', 'Element 1', 'Welcome to our presentation', 'Witamy w naszej prezentacji', 'Bienvenidos a nuestra presentación', 'Bienvenue à notre présentation'],
+          ['Slide 1', 'Element 2', 'Key Features', 'Kluczowe Funkcje', 'Características Clave', 'Fonctionnalités Clés'],
+          ['Slide 2', 'Element 1', 'Business Overview', 'Przegląd Biznesu', 'Resumen del Negocio', 'Aperçu des Affaires']
+        ];
+      }
+
+      const response = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`
+          }
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Get values failed: ${response.status} ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      const values = result.values || [];
+      
+      console.log(`✅ Retrieved ${values.length} rows with GOOGLETRANSLATE results`);
+      return values;
+
+    } catch (error) {
+      console.error('❌ Get sheet values failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Wait for GOOGLETRANSLATE formulas to calculate
+   */
+  async waitForFormulasToCalculate(spreadsheetId: string, timeoutMs: number = 180000): Promise<boolean> {
+    console.log(`⏳ Waiting for GOOGLETRANSLATE formulas to calculate (max ${timeoutMs/1000}s)...`);
+
+    const startTime = Date.now();
+    const checkInterval = 5000; // Check every 5 seconds
+    
+    while (Date.now() - startTime < timeoutMs) {
+      try {
+        // Check if we have real translated values (not formula text)
+        const values = await this.getSheetValues(spreadsheetId, 'A1:Z100');
+        
+        if (values.length > 1) {
+          // Check if we have actual translations (not just formulas)
+          const hasTranslations = values.slice(1).some(row => 
+            row.some(cell => 
+              cell && !cell.startsWith('=GOOGLETRANSLATE') && cell.length > 0
+            )
+          );
+          
+          if (hasTranslations) {
+            console.log('✅ GOOGLETRANSLATE formulas completed successfully');
+            return true;
+          }
+        }
+        
+        // Wait before next check
+        await new Promise(resolve => setTimeout(resolve, checkInterval));
+        
+      } catch (error) {
+        console.warn('⚠️ Error checking formula calculation status:', error);
+        // Continue waiting
+      }
+    }
+    
+    console.warn('⚠️ GOOGLETRANSLATE formulas may still be calculating (timeout reached)');
+    return false;
+  }
+
+  /**
+   * Delete file from Google Drive
+   */
+  async deleteFile(fileId: string): Promise<void> {
+    if (this.accessToken?.startsWith('mock_')) {
+      console.log(`🎭 Mock file deletion: ${fileId}`);
+      return;
+    }
+
+    try {
+      const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
+        method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${this.accessToken}`
         }
       });
 
-      if (!response.ok) {
-        throw new Error(`Drive download failed: ${response.status} ${response.statusText}`);
+      if (!response.ok && response.status !== 404) {
+        throw new Error(`Delete failed: ${response.status} ${response.statusText}`);
       }
 
-      const blob = await response.blob();
-      console.log(`✅ Successfully downloaded file: ${blob.size} bytes`);
-      
-      return blob;
-
+      console.log(`✅ File deleted from Drive: ${fileId}`);
     } catch (error) {
-      console.error('❌ Drive download failed:', error);
-      throw new Error(`Failed to download file from Google Drive: ${error}`);
-    }
-  }
-
-  /**
-   * Get sharing URL for a Google Drive file
-   */
-  async getSharingUrl(fileId: string): Promise<string> {
-    if (this.accessToken?.startsWith('mock_')) {
-      return `https://drive.google.com/file/d/${fileId}/view?usp=sharing`;
-    }
-
-    try {
-      // Make file publicly viewable
-      await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.accessToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          role: 'reader',
-          type: 'anyone'
-        })
-      });
-
-      return `https://drive.google.com/file/d/${fileId}/view?usp=sharing`;
-    } catch (error) {
-      console.error('❌ Failed to create sharing URL:', error);
+      console.error('❌ File deletion failed:', error);
       throw error;
     }
   }
