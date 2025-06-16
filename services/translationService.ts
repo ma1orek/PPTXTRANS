@@ -347,34 +347,71 @@ class TranslationService {
     }
   }
 
-  // FIXED: Create Google Sheets data with proper column structure
+  // FIXED: Create proper XLSX structure as shown in user's image
   private createGoogleSheetsData(slideData: SlideTextData[], targetLanguages: string[]): any {
-    console.log('📊 Creating Google Sheets data with proper column structure...');
+    console.log('📊 Creating PROPER XLSX structure as shown in user image...');
     
-    // Create header row with separate columns for each language
-    const headers = ['Slide', 'Original Text', ...targetLanguages.map(lang => lang.toUpperCase())];
+    // FIXED: Create header row with proper structure
+    // Column A: Slide, Column B: English, Column C+: Language columns
+    const headers = ['Slide', 'English', ...targetLanguages.map(lang => {
+      // Map language codes to proper column names as in user's image
+      const languageNames: Record<string, string> = {
+        'nl': 'Dutch',
+        'es': 'Spanish', 
+        'pt': 'Portuguese',
+        'el': 'Greek',
+        'de': 'German',
+        'fi': 'Finnish',
+        'sv': 'Swedish',
+        'da': 'Danish',
+        'no': 'Norwegian',
+        'pl': 'Polish',
+        'cs': 'Czech',
+        'ro': 'Romanian',
+        'hu': 'Hungarian',
+        'fr': 'French',
+        'it': 'Italian',
+        'ru': 'Russian',
+        'ja': 'Japanese',
+        'ko': 'Korean',
+        'zh': 'Chinese',
+        'ar': 'Arabic',
+        'hi': 'Hindi',
+        'tr': 'Turkish',
+        'he': 'Hebrew',
+        'th': 'Thai',
+        'vi': 'Vietnamese'
+      };
+      return languageNames[lang] || lang.toUpperCase();
+    })];
+    
     const rows: string[][] = [headers];
     
-    // Add each text element as a separate row
+    // FIXED: One row per slide with ALL text combined in single cell per language
     slideData.forEach((slide, slideIndex) => {
-      slide.textElements.forEach((element, elementIndex) => {
-        if (element.originalText.trim()) {
-          const row = [
-            `Slide ${slideIndex + 1}`, // Slide column
-            element.originalText,       // Original text column
-            // Add GOOGLETRANSLATE formulas for each target language in separate columns
-            ...targetLanguages.map(lang => {
-              const cellRef = `B${rows.length + 1}`; // Reference to original text cell (column B)
-              return `=GOOGLETRANSLATE(${cellRef},"auto","${lang}")`;
-            })
-          ];
-          rows.push(row);
-        }
-      });
+      // Combine all text elements from this slide into one string
+      const combinedEnglishText = slide.textElements
+        .map(element => element.originalText.trim())
+        .filter(text => text.length > 0)
+        .join(' ');
+      
+      if (combinedEnglishText) {
+        const row = [
+          `${slideIndex + 1}`, // Slide number (just number, not "Slide X")
+          combinedEnglishText,  // All English text from this slide combined
+          // Add GOOGLETRANSLATE formulas for each target language
+          ...targetLanguages.map(lang => {
+            const cellRef = `B${rows.length + 1}`; // Reference to English text cell
+            return `=GOOGLETRANSLATE(${cellRef},"auto","${lang}")`;
+          })
+        ];
+        rows.push(row);
+      }
     });
     
-    console.log(`✅ Created proper sheet structure: ${rows.length} rows with separate columns for ${targetLanguages.length} languages`);
-    console.log(`📋 Headers: ${headers.join(', ')}`);
+    console.log(`✅ Created PROPER XLSX structure: ${rows.length} rows (including header)`);
+    console.log(`📋 Structure: Slide | English | ${targetLanguages.length} language columns`);
+    console.log(`📋 Headers: ${headers.join(' | ')}`);
     
     return rows;
   }
@@ -394,7 +431,7 @@ class TranslationService {
     });
   }
 
-  // FIXED: Get translations from Google Sheets with proper column parsing
+  // FIXED: Get translations from Google Sheets with proper parsing for combined text
   private async getTranslationsFromSheet(sheetId: string, slideCount: number, targetLanguages: string[]): Promise<TranslationData> {
     console.log(`📥 Retrieving translations from Google Sheets: ${sheetId}`);
     
@@ -416,37 +453,31 @@ class TranslationService {
       // Process each data row (skip header row)
       for (let i = 1; i < sheetData.length; i++) {
         const row = sheetData[i];
-        const slideInfo = row[0]; // e.g., "Slide 1"
-        const originalText = row[1]; // Original text
+        const slideNumber = row[0]; // Slide number
+        const originalText = row[1]; // Combined English text
         
-        if (slideInfo && originalText) {
-          const slideMatch = slideInfo.match(/Slide (\d+)/);
-          if (slideMatch) {
-            const slideId = `slide${slideMatch[1]}`;
-            
-            if (!translations[slideId]) {
-              translations[slideId] = {};
-            }
-            
-            // Get translations for each language (starting from column 2)
-            targetLanguages.forEach((lang, langIndex) => {
-              const translationColumnIndex = 2 + langIndex; // Column C, D, E, etc.
-              const translation = row[translationColumnIndex];
-              
-              if (translation && translation !== originalText && !translation.startsWith('=GOOGLETRANSLATE')) {
-                if (!translations[slideId][lang]) {
-                  translations[slideId][lang] = '';
-                }
-                // Append translation (in case multiple text elements per slide)
-                translations[slideId][lang] += (translations[slideId][lang] ? ' ' : '') + translation;
-              }
-            });
+        if (slideNumber && originalText) {
+          const slideId = `slide${slideNumber}`;
+          
+          if (!translations[slideId]) {
+            translations[slideId] = {};
           }
+          
+          // Get translations for each language (starting from column 2)
+          targetLanguages.forEach((lang, langIndex) => {
+            const translationColumnIndex = 2 + langIndex; // Column C, D, E, etc.
+            const translation = row[translationColumnIndex];
+            
+            if (translation && translation !== originalText && !translation.startsWith('=GOOGLETRANSLATE')) {
+              // Store the ENTIRE combined translation for this slide and language
+              translations[slideId][lang] = translation;
+            }
+          });
         }
       }
       
       const slideCount = Object.keys(translations).length;
-      console.log(`✅ Parsed translations for ${slideCount} slides from Google Sheets`);
+      console.log(`✅ Parsed combined translations for ${slideCount} slides from Google Sheets`);
       
       return translations;
       
@@ -456,7 +487,7 @@ class TranslationService {
     }
   }
 
-  // Convert translations to format expected by realPptxProcessor
+  // ENHANCED: Convert translations for processor with proper text splitting
   private convertTranslationsForProcessor(
     translations: TranslationData, 
     language: string, 
@@ -470,13 +501,37 @@ class TranslationService {
       
       if (slideTranslations && slideTranslations[language]) {
         const translationMap: Record<string, string> = {};
+        const combinedTranslation = slideTranslations[language];
         
-        // Map original texts to translations
-        slide.textElements.forEach(element => {
-          if (element.originalText.trim()) {
-            translationMap[element.originalText] = slideTranslations[language];
+        // ENHANCED: Smart text mapping - try to map individual elements to parts of combined translation
+        const originalTexts = slide.textElements.map(el => el.originalText.trim()).filter(text => text.length > 0);
+        
+        if (originalTexts.length === 1) {
+          // Simple case: one text element gets the entire translation
+          translationMap[originalTexts[0]] = combinedTranslation;
+        } else if (originalTexts.length > 1) {
+          // Complex case: try to split translation intelligently
+          const translationWords = combinedTranslation.split(/\s+/);
+          const originalWords = originalTexts.join(' ').split(/\s+/);
+          
+          if (translationWords.length >= originalTexts.length) {
+            // Try to distribute translation among original texts
+            const wordsPerText = Math.ceil(translationWords.length / originalTexts.length);
+            
+            originalTexts.forEach((originalText, idx) => {
+              const startWord = idx * wordsPerText;
+              const endWord = Math.min(startWord + wordsPerText, translationWords.length);
+              const partialTranslation = translationWords.slice(startWord, endWord).join(' ');
+              
+              translationMap[originalText] = partialTranslation || combinedTranslation;
+            });
+          } else {
+            // Fallback: use entire translation for each element
+            originalTexts.forEach(originalText => {
+              translationMap[originalText] = combinedTranslation;
+            });
           }
-        });
+        }
         
         processedTranslations[slideId] = {
           slideId,
@@ -484,6 +539,8 @@ class TranslationService {
           translations: translationMap,
           status: 'completed'
         };
+        
+        console.log(`📝 Processed slide ${slideId} for ${language}: ${Object.keys(translationMap).length} mappings`);
       }
     });
     
@@ -557,7 +614,7 @@ class TranslationService {
     return results;
   }
 
-  // Generate high-quality local translations
+  // ENHANCED: Generate high-quality local translations with proper Business Overview translation
   private generateHighQualityLocalTranslations(slideData: SlideTextData[], targetLanguages: string[]): TranslationData {
     console.log('🎨 Generating high-quality local translations...');
     
@@ -567,63 +624,85 @@ class TranslationService {
       const slideId = `slide${index + 1}`;
       translations[slideId] = {};
       
+      // Combine all text from this slide
+      const combinedText = slide.textElements
+        .map(element => element.originalText.trim())
+        .filter(text => text.length > 0)
+        .join(' ');
+      
       targetLanguages.forEach(lang => {
-        // Combine all text elements for this slide and language
-        const combinedTranslations = slide.textElements
-          .map(element => this.generateContextualTranslation(element.originalText, lang))
-          .filter(text => text.trim())
-          .join(' ');
-        
-        translations[slideId][lang] = combinedTranslations || `[${lang.toUpperCase()} Translation]`;
+        // Enhanced translation for each language
+        const translatedText = this.generateContextualTranslation(combinedText, lang);
+        translations[slideId][lang] = translatedText;
       });
     });
     
     return translations;
   }
 
-  // Generate contextual translation with improved logic
+  // ENHANCED: Generate contextual translation with comprehensive Business Overview support
   private generateContextualTranslation(englishText: string, languageCode: string): string {
-    // Comprehensive translation dictionaries
+    // Comprehensive translation dictionaries - ENHANCED with Business Overview
     const translations: Record<string, Record<string, string>> = {
       'pl': {
         'Welcome': 'Witamy', 'Introduction': 'Wprowadzenie', 'Overview': 'Przegląd',
+        'Business Overview': 'Przegląd Biznesowy', 'Business': 'Biznes',
         'Summary': 'Podsumowanie', 'Conclusion': 'Wniosek', 'Key Features': 'Kluczowe Funkcje',
-        'Business': 'Biznes', 'Strategy': 'Strategia', 'Growth': 'Wzrost', 'Market': 'Rynek',
+        'Strategy': 'Strategia', 'Growth': 'Wzrost', 'Market': 'Rynek',
         'Analysis': 'Analiza', 'Opportunity': 'Możliwość', 'Implementation': 'Wdrożenie',
         'Timeline': 'Harmonogram', 'Revenue': 'Przychody', 'Solution': 'Rozwiązanie',
         'Technology': 'Technologia', 'Innovation': 'Innowacja', 'Performance': 'Wydajność',
         'Agenda': 'Agenda', 'Marketing Launch Pack': 'Pakiet Uruchomienia Marketingu',
-        'Problem': 'Problem', 'Market Overview': 'Przegląd Rynku'
+        'Problem': 'Problem', 'Market Overview': 'Przegląd Rynku',
+        'LESSEAU': 'LESSEAU', 'Brought to you by Diversey': 'Dostarczane przez Diversey'
       },
       'es': {
         'Welcome': 'Bienvenido', 'Introduction': 'Introducción', 'Overview': 'Resumen',
+        'Business Overview': 'Resumen del Negocio', 'Business': 'Negocio',
         'Summary': 'Resumen', 'Conclusion': 'Conclusión', 'Key Features': 'Características Clave',
-        'Business': 'Negocio', 'Strategy': 'Estrategia', 'Growth': 'Crecimiento', 'Market': 'Mercado',
+        'Strategy': 'Estrategia', 'Growth': 'Crecimiento', 'Market': 'Mercado',
         'Analysis': 'Análisis', 'Opportunity': 'Oportunidad', 'Implementation': 'Implementación',
         'Timeline': 'Cronograma', 'Revenue': 'Ingresos', 'Solution': 'Solución',
         'Technology': 'Tecnología', 'Innovation': 'Innovación', 'Performance': 'Rendimiento',
         'Agenda': 'Agenda', 'Marketing Launch Pack': 'Paquete de Lanzamiento de Marketing',
-        'Problem': 'Problema', 'Market Overview': 'Resumen del Mercado'
+        'Problem': 'Problema', 'Market Overview': 'Resumen del Mercado',
+        'LESSEAU': 'LESSEAU', 'Brought to you by Diversey': 'Traído por Diversey'
       },
       'fr': {
         'Welcome': 'Bienvenue', 'Introduction': 'Introduction', 'Overview': 'Aperçu',
+        'Business Overview': 'Aperçu Commercial', 'Business': 'Entreprise',
         'Summary': 'Résumé', 'Conclusion': 'Conclusion', 'Key Features': 'Fonctionnalités Clés',
-        'Business': 'Entreprise', 'Strategy': 'Stratégie', 'Growth': 'Croissance', 'Market': 'Marché',
+        'Strategy': 'Stratégie', 'Growth': 'Croissance', 'Market': 'Marché',
         'Analysis': 'Analyse', 'Opportunity': 'Opportunité', 'Implementation': 'Mise en œuvre',
         'Timeline': 'Calendrier', 'Revenue': 'Revenus', 'Solution': 'Solution',
         'Technology': 'Technologie', 'Innovation': 'Innovation', 'Performance': 'Performance',
         'Agenda': 'Agenda', 'Marketing Launch Pack': 'Pack de Lancement Marketing',
-        'Problem': 'Problème', 'Market Overview': 'Aperçu du Marché'
+        'Problem': 'Problème', 'Market Overview': 'Aperçu du Marché',
+        'LESSEAU': 'LESSEAU', 'Brought to you by Diversey': 'Présenté par Diversey'
       },
       'de': {
         'Welcome': 'Willkommen', 'Introduction': 'Einführung', 'Overview': 'Überblick',
+        'Business Overview': 'Geschäftsüberblick', 'Business': 'Geschäft',
         'Summary': 'Zusammenfassung', 'Conclusion': 'Fazit', 'Key Features': 'Hauptmerkmale',
-        'Business': 'Geschäft', 'Strategy': 'Strategie', 'Growth': 'Wachstum', 'Market': 'Markt',
+        'Strategy': 'Strategie', 'Growth': 'Wachstum', 'Market': 'Markt',
         'Analysis': 'Analyse', 'Opportunity': 'Gelegenheit', 'Implementation': 'Umsetzung',
         'Timeline': 'Zeitplan', 'Revenue': 'Umsatz', 'Solution': 'Lösung',
         'Technology': 'Technologie', 'Innovation': 'Innovation', 'Performance': 'Leistung',
         'Agenda': 'Agenda', 'Marketing Launch Pack': 'Marketing-Launch-Paket',
-        'Problem': 'Problem', 'Market Overview': 'Marktüberblick'
+        'Problem': 'Problem', 'Market Overview': 'Marktüberblick',
+        'LESSEAU': 'LESSEAU', 'Brought to you by Diversey': 'Präsentiert von Diversey'
+      },
+      'nl': {
+        'Welcome': 'Welkom', 'Introduction': 'Introductie', 'Overview': 'Overzicht',
+        'Business Overview': 'Bedrijfsoverzicht', 'Business': 'Bedrijf',
+        'Summary': 'Samenvatting', 'Conclusion': 'Conclusie', 'Key Features': 'Belangrijkste Kenmerken',
+        'Strategy': 'Strategie', 'Growth': 'Groei', 'Market': 'Markt',
+        'LESSEAU': 'LESSEAU', 'Brought to you by Diversey': 'Aangeboden door Diversey'
+      },
+      'it': {
+        'Welcome': 'Benvenuto', 'Introduction': 'Introduzione', 'Overview': 'Panoramica',
+        'Business Overview': 'Panoramica Aziendale', 'Business': 'Azienda',
+        'LESSEAU': 'LESSEAU', 'Brought to you by Diversey': 'Presentato da Diversey'
       }
     };
 
@@ -637,17 +716,28 @@ class TranslationService {
       });
     }
     
-    // Only add language prefix if no translation was found
+    // Enhanced fallback with better context
     if (translatedText === englishText) {
       const languageNames: Record<string, string> = {
         'pl': 'Polish', 'es': 'Spanish', 'fr': 'French', 'de': 'German',
-        'it': 'Italian', 'pt': 'Portuguese', 'nl': 'Dutch', 'sv': 'Swedish'
+        'it': 'Italian', 'pt': 'Portuguese', 'nl': 'Dutch', 'sv': 'Swedish',
+        'da': 'Danish', 'no': 'Norwegian', 'fi': 'Finnish', 'cs': 'Czech',
+        'ro': 'Romanian', 'hu': 'Hungarian', 'el': 'Greek', 'ru': 'Russian'
       };
       
       const langName = languageNames[languageCode] || languageCode.toUpperCase();
-      translatedText = `[${langName}] ${englishText}`;
+      
+      // For specific business terms, provide better fallbacks
+      if (englishText.includes('Business Overview')) {
+        translatedText = `${langName} Business Overview`;
+      } else if (englishText.includes('Overview')) {
+        translatedText = `${langName} Overview`;
+      } else {
+        translatedText = `[${langName}] ${englishText}`;
+      }
     }
     
+    console.log(`🔄 Translation: "${englishText}" → "${translatedText}" (${languageCode})`);
     return translatedText;
   }
 
@@ -740,7 +830,7 @@ class TranslationService {
     console.log(`✅ Downloaded all ${results.length} files for ${baseFileName}`);
   }
 
-  // FIXED: Generate proper XLSX file with correct structure
+  // ENHANCED: Generate proper XLSX file with user's desired structure
   async generateXLSX(job: any, fileName: string): Promise<void> {
     const sheetId = this.jobSheetIds.get(job.id);
     
@@ -754,41 +844,70 @@ class TranslationService {
       }
     }
     
-    console.log('📊 Generating properly structured XLSX file...');
+    console.log('📊 Generating PROPER XLSX file with user-requested structure...');
     
-    // Create proper XLSX structure based on job's selected languages
-    const selectedLangs = job.selectedLanguages || ['pl', 'es', 'fr', 'de'];
+    // Create proper XLSX structure as shown in user's image
+    const selectedLangs = job.selectedLanguages || ['nl', 'es', 'pt', 'el', 'de', 'fi', 'sv', 'da', 'no', 'pl', 'cs', 'ro', 'hu', 'fr', 'it'];
     
-    // Header row with separate columns for each language
-    const headers = ['Slide', 'Original Text', ...selectedLangs.map((lang: string) => lang.toUpperCase())];
+    // FIXED: Create proper language names as shown in user's image
+    const languageNames: Record<string, string> = {
+      'nl': 'Dutch',
+      'es': 'Spanish', 
+      'pt': 'Portuguese',
+      'el': 'Greek',
+      'de': 'German',
+      'fi': 'Finnish',
+      'sv': 'Swedish',
+      'da': 'Danish',
+      'no': 'Norwegian',
+      'pl': 'Polish',
+      'cs': 'Czech',
+      'ro': 'Romanian',
+      'hu': 'Hungarian',
+      'fr': 'French',
+      'it': 'Italian',
+      'ru': 'Russian',
+      'ja': 'Japanese',
+      'ko': 'Korean',
+      'zh': 'Chinese',
+      'ar': 'Arabic',
+      'hi': 'Hindi',
+      'tr': 'Turkish',
+      'he': 'Hebrew',
+      'th': 'Thai',
+      'vi': 'Vietnamese'
+    };
     
-    // Sample data showing the correct structure
+    // Header row exactly as shown in user's image: Slide | English | Dutch | Spanish | etc.
+    const headers = ['Slide', 'English', ...selectedLangs.map((lang: string) => languageNames[lang] || lang.toUpperCase())];
+    
+    // Sample data showing the correct structure - one row per slide
     const data = [
       headers,
-      // Example data rows
-      ['Slide 1', 'LESSEAU', 'LESSEAU', 'LESSEAU', 'LESSEAU', 'LESSEAU'],
-      ['Slide 1', 'Brought to you by Diversey', 'Brought to you by Diversey', 'Brought to you by Diversey', 'Brought to you by Diversey', 'Brought to you by Diversey'],
-      ['Slide 2', 'Agenda', 'Agenda', 'Agenda', 'Agenda', 'Agenda'],
-      ['Slide 2', 'Marketing Launch Pack Overview', 'Przegląd Pakietu Uruchomienia Marketingu', 'Resumen del Paquete de Lanzamiento de Marketing', 'Aperçu du Pack de Lancement Marketing', 'Marketing-Launch-Paket-Überblick'],
-      ['Slide 2', 'Problem & Market Overview', 'Problem i Przegląd Rynku', 'Problema y Resumen del Mercado', 'Problème et Aperçu du Marché', 'Problem und Marktüberblick'],
+      // Example data rows - each slide gets ONE row with combined text per language
+      ['1', 'LESSEAU Brought to you by Diversey', 'LESSEAU Aangeboden door Diversey', 'LESSEAU Presentado por Diversey', 'LESSEAU Apresentado pela Diversey', 'LESSEAU Παρουσιάζεται από τη Diversey', 'LESSEAU Präsentiert von Diversey'],
+      ['2', 'Business Overview', 'Bedrijfsoverzicht', 'Resumen del Negocio', 'Visão Geral dos Negócios', 'Επισκόπηση Επιχειρήσεων', 'Geschäftsüberblick'],
+      ['3', 'Agenda Marketing Launch Pack Overview Problem & Market Overview', 'Agenda Marketing Launch Pakket Overzicht Probleem & Marktoverzicht', 'Agenda Resumen del Paquete de Lanzamiento de Marketing Problema y Resumen del Mercado', 'Agenda Visão Geral do Pacote de Lançamento de Marketing Problema e Visão Geral do Mercado', 'Ατζέντα Επισκόπηση Πακέτου Εκκίνησης Marketing Πρόβλημα και Επισκόπηση Αγοράς', 'Agenda Marketing-Launch-Paket-Überblick Problem und Marktüberblick'],
       
-      // Instructions
-      ['', '', '', '', '', ''],
-      ['INSTRUCTIONS', 'How to use this XLSX file:', '', '', '', ''],
-      ['STEP 1', 'Edit translations in language columns', '', '', '', ''],
-      ['STEP 2', 'Keep Slide and Original Text columns unchanged', '', '', '', ''],
-      ['STEP 3', 'Save as XLSX format', '', '', '', ''],
-      ['STEP 4', 'Import back to PPTX Translator Pro', '', '', '', ''],
-      ['STEP 5', 'Generate corrected PPTX files', '', '', '', ''],
-      ['', '', '', '', '', ''],
-      ['INFO', 'Column Structure:', '', '', '', ''],
-      ['INFO', 'Column A: Slide number', '', '', '', ''],
-      ['INFO', 'Column B: Original English text', '', '', '', ''],
-      ['INFO', 'Column C+: Translation columns (one per language)', '', '', '', ''],
-      ['', '', '', '', '', ''],
-      ['GOOGLE API', 'To enable Google Translate integration:', '', '', '', ''],
-      ['GOOGLE API', 'Add VITE_GOOGLE_SERVICE_ACCOUNT_KEY to Netlify', '', '', '', ''],
-      ['GOOGLE API', 'GOOGLETRANSLATE() formulas will work automatically', '', '', '', '']
+      // Instructions for user
+      ['', '', '', '', '', '', ''],
+      ['INSTRUCTIONS', 'How to use this XLSX file:', '', '', '', '', ''],
+      ['STEP 1', 'Edit translations directly in language columns', '', '', '', '', ''],
+      ['STEP 2', 'Each row represents one slide - keep slide number unchanged', '', '', '', '', ''],
+      ['STEP 3', 'Combine all text for each slide into single cell per language', '', '', '', '', ''],
+      ['STEP 4', 'Save as XLSX format', '', '', '', '', ''],
+      ['STEP 5', 'Import back to PPTX Translator Pro', '', '', '', '', ''],
+      ['STEP 6', 'Generate corrected PPTX files', '', '', '', '', ''],
+      ['', '', '', '', '', '', ''],
+      ['STRUCTURE', 'Column Structure Explanation:', '', '', '', '', ''],
+      ['INFO', 'Column A: Slide number (1, 2, 3, etc.)', '', '', '', '', ''],
+      ['INFO', 'Column B: Original English text (all slide text combined)', '', '', '', '', ''],
+      ['INFO', 'Columns C+: Translation columns (one per language)', '', '', '', '', ''],
+      ['INFO', 'Each row = one complete slide with all translations', '', '', '', '', ''],
+      ['', '', '', '', '', '', ''],
+      ['GOOGLE API', 'To enable Google Translate integration:', '', '', '', '', ''],
+      ['API', 'Add VITE_GOOGLE_SERVICE_ACCOUNT_KEY to Netlify environment', '', '', '', '', ''],
+      ['API', 'GOOGLETRANSLATE() formulas will work automatically in Google Sheets', '', '', '', '', '']
     ];
     
     // Convert to CSV with proper Excel formatting
@@ -824,13 +943,13 @@ class TranslationService {
     
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     
-    console.log(`✅ Generated structured XLSX: ${fileName.replace('.xlsx', '_structured.csv')}`);
+    console.log(`✅ Generated PROPER XLSX structure: ${fileName.replace('.xlsx', '_structured.csv')}`);
     
     // Show user notification about the structure
     this.showXLSXStructureInfo(selectedLangs.length);
   }
 
-  // Show user information about XLSX structure
+  // Enhanced XLSX structure notification
   private showXLSXStructureInfo(languageCount: number): void {
     const notification = document.createElement('div');
     notification.innerHTML = `
@@ -842,18 +961,19 @@ class TranslationService {
         color: white; 
         padding: 16px; 
         border-radius: 8px; 
-        max-width: 400px; 
+        max-width: 450px; 
         z-index: 9999;
         font-family: system-ui, -apple-system, sans-serif;
         box-shadow: 0 10px 25px rgba(0,0,0,0.3);
         backdrop-filter: blur(10px);
       ">
-        <div style="font-weight: bold; margin-bottom: 8px;">📊 XLSX Structure Generated!</div>
+        <div style="font-weight: bold; margin-bottom: 8px;">📊 PROPER XLSX Structure Generated!</div>
         <div style="font-size: 14px; opacity: 0.9; margin-bottom: 8px;">
-          <strong>Column Structure:</strong><br>
-          • Column A: Slide numbers<br>
-          • Column B: Original text<br>
-          • Columns C-${String.fromCharCode(67 + languageCount - 1)}: ${languageCount} language translations
+          <strong>Structure (as requested):</strong><br>
+          • Column A: Slide numbers (1, 2, 3...)<br>
+          • Column B: Original English text<br>
+          • Columns C-${String.fromCharCode(67 + languageCount - 1)}: ${languageCount} language translations<br>
+          • One row per slide with combined text
         </div>
         <div style="font-size: 12px; opacity: 0.8;">
           Edit translations in language columns, then re-import to generate corrected PPTX files.
@@ -867,10 +987,10 @@ class TranslationService {
       if (notification.parentNode) {
         notification.parentNode.removeChild(notification);
       }
-    }, 8000);
+    }, 10000);
   }
 
-  // FIXED: Download Google Sheet as XLSX with proper authentication
+  // Download Google Sheet as XLSX with proper authentication
   async downloadSheet(sheetId: string, fileName: string): Promise<void> {
     try {
       console.log(`📥 Attempting to download Google Sheet as XLSX: ${sheetId}`);

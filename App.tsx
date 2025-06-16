@@ -13,12 +13,12 @@ import { useTranslation } from './hooks/useTranslation';
 import { translationService, TranslationResult } from './services/translationService';
 import { googleApiService } from './services/googleApi';
 
-// FIXED VERSION - Removed problematic Service Worker
-const APP_VERSION = '2024.12.16.19.00'; // Updated timestamp for SW fix
+// FIXED VERSION - XLSX Workflow and Translation Fixed
+const APP_VERSION = '2024.12.16.20.30'; // Updated timestamp for JSX fix
 const BUILD_INFO = {
   version: APP_VERSION,
   buildTime: new Date().toISOString(),
-  features: ['REAL_PPTX_PROCESSING', 'XLSX_WORKFLOW_FIXED', 'LANGUAGE_SELECTION_FIXED', 'SERVICE_WORKER_FIXED']
+  features: ['REAL_PPTX_PROCESSING', 'XLSX_STRUCTURE_FIXED', 'TRANSLATION_WORKFLOW_FIXED', 'BUSINESS_OVERVIEW_TRANSLATIONS', 'JSX_SYNTAX_FIXED']
 };
 
 type TranslationJob = {
@@ -69,6 +69,7 @@ const AVAILABLE_LANGUAGES = [
   { code: 'eu', name: 'Basque', flag: '🇪🇸' },
   { code: 'ca', name: 'Catalan', flag: '🇪🇸' },
   { code: 'gl', name: 'Galician', flag: '🇪🇸' },
+  { code: 'el', name: 'Greek', flag: '🇬🇷' },
   
   // Slavic Languages
   { code: 'ru', name: 'Russian', flag: '🇷🇺' },
@@ -111,7 +112,6 @@ const AVAILABLE_LANGUAGES = [
   { code: 'am', name: 'Amharic', flag: '🇪🇹' },
   
   // Other Languages
-  { code: 'el', name: 'Greek', flag: '🇬🇷' },
   { code: 'eo', name: 'Esperanto', flag: '🌍' },
   { code: 'la', name: 'Latin', flag: '🏛️' }
 ];
@@ -141,7 +141,8 @@ export default function App() {
   useEffect(() => {
     console.log('🔍 DEBUG - selectedLanguages changed:', selectedLanguages);
     console.log('🔍 DEBUG - importedLanguages:', importedLanguages);
-  }, [selectedLanguages, importedLanguages]);
+    console.log('🔍 DEBUG - importedTranslations keys:', importedTranslations ? Object.keys(importedTranslations) : 'none');
+  }, [selectedLanguages, importedLanguages, importedTranslations]);
 
   // Mouse tracking for animations
   useEffect(() => {
@@ -158,7 +159,7 @@ export default function App() {
 
   // FIXED: Effective cache busting without problematic Service Worker
   useEffect(() => {
-    console.log(`🚀 PPTX Translator Pro v${APP_VERSION} - SERVICE WORKER FIXED`);
+    console.log(`🚀 PPTX Translator Pro v${APP_VERSION} - JSX SYNTAX FIXED`);
     console.log('📋 Build Info:', BUILD_INFO);
     
     // Strategy 1: Meta tags for cache control - RELIABLE
@@ -216,7 +217,7 @@ export default function App() {
           font-size: 14px;
           box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         ">
-          ✅ Updated to v${APP_VERSION} - Service Worker Fixed!
+          ✅ Updated to v${APP_VERSION} - JSX Syntax Fixed!
         </div>
       `;
       
@@ -291,117 +292,53 @@ export default function App() {
     return () => clearTimeout(timeoutId);
   }, []);
 
-  // FIXED: Handle XLSX import with immediate UI feedback and proper state management
+  // ENHANCED: Handle XLSX import with proper structure parsing and immediate workflow setup
   const handleXLSXImport = (file: File, translations: any) => {
     try {
-      console.log('📊 XLSX IMPORT STARTED:', { fileName: file.name, translationsKeys: Object.keys(translations) });
+      console.log('📊 XLSX IMPORT with PROPER STRUCTURE:', { fileName: file.name, translationsKeys: Object.keys(translations) });
       
       // Store imported translations immediately
       setImportedTranslations(translations);
       setImportedFileName(file.name);
       
-      // Enhanced language detection with more comprehensive mapping
+      // ENHANCED: Extract languages from the translations structure
       const detectedLanguages = new Set<string>();
       
-      // Parse translations to find available languages
+      // Parse translations to find available languages (excluding originalText)
       Object.values(translations).forEach((slideTranslations: any) => {
         if (slideTranslations && typeof slideTranslations === 'object') {
-          Object.keys(slideTranslations).forEach(lang => {
-            // Filter out metadata columns and common non-language keys
-            const cleanLang = lang.toLowerCase().trim();
-            if (!['slide', 'original text', 'originaltext', 'original_text', 'element', 'status', 'slide_id', 'index'].includes(cleanLang)) {
-              detectedLanguages.add(cleanLang);
+          Object.keys(slideTranslations).forEach(key => {
+            // Skip originalText and metadata keys
+            if (key !== 'originalText' && !['slide', 'slide_id', 'index', 'element', 'status'].includes(key.toLowerCase())) {
+              detectedLanguages.add(key.toLowerCase());
             }
           });
         }
       });
       
-      console.log('🔍 Raw detected languages from XLSX:', Array.from(detectedLanguages));
+      console.log('🔍 Detected languages from XLSX structure:', Array.from(detectedLanguages));
       
-      // ENHANCED mapping with more comprehensive language support
+      // Map detected languages to available language codes
       const mappedLanguages: string[] = [];
-      const languageMapping: Record<string, string> = {
-        // Primary language codes
-        'pl': 'pl', 'polish': 'pl', 'polski': 'pl', 'poland': 'pl', 'pol': 'pl',
-        'es': 'es', 'spanish': 'es', 'espanol': 'es', 'español': 'es', 'spain': 'es', 'esp': 'es',
-        'fr': 'fr', 'french': 'fr', 'francais': 'fr', 'français': 'fr', 'france': 'fr', 'fre': 'fr',
-        'de': 'de', 'german': 'de', 'deutsch': 'de', 'germany': 'de', 'ger': 'de', 'deu': 'de',
-        'it': 'it', 'italian': 'it', 'italiano': 'it', 'italy': 'it', 'ita': 'it',
-        'pt': 'pt', 'portuguese': 'pt', 'português': 'pt', 'portugal': 'pt', 'por': 'pt',
-        'ru': 'ru', 'russian': 'ru', 'русский': 'ru', 'russia': 'ru', 'rus': 'ru',
-        'ja': 'ja', 'japanese': 'ja', '日本語': 'ja', 'japan': 'ja', 'jpn': 'ja',
-        'ko': 'ko', 'korean': 'ko', '한국어': 'ko', 'korea': 'ko', 'kor': 'ko',
-        'zh': 'zh', 'chinese': 'zh', '中文': 'zh', 'china': 'zh', 'chn': 'zh', 'chi': 'zh',
-        'ar': 'ar', 'arabic': 'ar', 'العربية': 'ar', 'ara': 'ar',
-        'hi': 'hi', 'hindi': 'hi', 'हिन्दी': 'hi', 'india': 'hi', 'hin': 'hi',
-        'nl': 'nl', 'dutch': 'nl', 'nederlands': 'nl', 'netherlands': 'nl', 'nld': 'nl',
-        'sv': 'sv', 'swedish': 'sv', 'svenska': 'sv', 'sweden': 'sv', 'swe': 'sv',
-        'no': 'no', 'norwegian': 'no', 'norsk': 'no', 'norway': 'no', 'nor': 'no',
-        'da': 'da', 'danish': 'da', 'dansk': 'da', 'denmark': 'da', 'dan': 'da',
-        'fi': 'fi', 'finnish': 'fi', 'suomi': 'fi', 'finland': 'fi', 'fin': 'fi',
-        
-        // Additional common patterns
-        'czech': 'cs', 'cesky': 'cs', 'cze': 'cs',
-        'slovak': 'sk', 'slovensky': 'sk', 'slk': 'sk',
-        'hungarian': 'hu', 'magyar': 'hu', 'hun': 'hu',
-        'romanian': 'ro', 'romana': 'ro', 'ron': 'ro',
-        'bulgarian': 'bg', 'български': 'bg', 'bul': 'bg',
-        'croatian': 'hr', 'hrvatski': 'hr', 'hrv': 'hr',
-        'slovenian': 'sl', 'slovenščina': 'sl', 'slv': 'sl',
-        'greek': 'el', 'ελληνικά': 'el', 'gre': 'el', 'ell': 'el',
-        'turkish': 'tr', 'türkçe': 'tr', 'tur': 'tr',
-        'hebrew': 'he', 'עברית': 'he', 'heb': 'he',
-        'persian': 'fa', 'farsi': 'fa', 'فارسی': 'fa', 'per': 'fa',
-        'thai': 'th', 'ไทย': 'th', 'tha': 'th',
-        'vietnamese': 'vi', 'tiếng việt': 'vi', 'vie': 'vi',
-        'indonesian': 'id', 'bahasa indonesia': 'id', 'ind': 'id',
-        'malay': 'ms', 'bahasa melayu': 'ms', 'msa': 'ms',
-        'filipino': 'tl', 'tagalog': 'tl', 'fil': 'tl',
-        'ukrainian': 'uk', 'українська': 'uk', 'ukr': 'uk',
-        'lithuanian': 'lt', 'lietuvių': 'lt', 'lit': 'lt',
-        'latvian': 'lv', 'latviešu': 'lv', 'lav': 'lv',
-        'estonian': 'et', 'eesti': 'et', 'est': 'et'
-      };
-      
-      // Map detected languages to standard codes
-      detectedLanguages.forEach(lang => {
-        const langKey = lang.toLowerCase().trim();
-        const mappedCode = languageMapping[langKey];
-        
-        if (mappedCode && !mappedLanguages.includes(mappedCode)) {
-          mappedLanguages.push(mappedCode);
-          console.log(`✅ Mapped "${lang}" → "${mappedCode}"`);
-        } else {
-          // Try to find by name match in AVAILABLE_LANGUAGES
-          const found = AVAILABLE_LANGUAGES.find(
-            avail => 
-              avail.name.toLowerCase() === langKey ||
-              avail.code.toLowerCase() === langKey ||
-              langKey.includes(avail.name.toLowerCase()) ||
-              avail.name.toLowerCase().includes(langKey)
-          );
-          if (found && !mappedLanguages.includes(found.code)) {
-            mappedLanguages.push(found.code);
-            console.log(`✅ Found by match "${lang}" → "${found.code}" (${found.name})`);
-          } else {
-            console.warn(`⚠️ Could not map language: "${lang}"`);
-          }
+      detectedLanguages.forEach(langCode => {
+        if (AVAILABLE_LANGUAGES.find(l => l.code === langCode)) {
+          mappedLanguages.push(langCode);
         }
       });
       
-      console.log('✅ Final mapped languages:', mappedLanguages);
+      console.log('✅ Mapped to available languages:', mappedLanguages);
       
-      // CRITICAL: Update state immediately and log the changes
+      // CRITICAL: Update state immediately
       setImportedLanguages(mappedLanguages);
       setSelectedLanguages(mappedLanguages);
       
-      console.log('🔄 State updated:', {
+      console.log('🔄 State updated after XLSX import:', {
         importedLanguages: mappedLanguages,
         selectedLanguages: mappedLanguages,
         slideCount: Object.keys(translations).length
       });
       
-      // Enhanced immediate feedback notification
+      // Enhanced immediate feedback notification with better instructions
       if (mappedLanguages.length > 0) {
         const languageNames = mappedLanguages.map(code => 
           AVAILABLE_LANGUAGES.find(l => l.code === code)?.name || code
@@ -426,17 +363,17 @@ export default function App() {
             border: 1px solid rgba(34, 197, 94, 0.3);
           ">
             <div style="font-weight: bold; margin-bottom: 8px; font-size: 16px;">
-              📊 XLSX Languages Auto-Selected! ✅
+              📊 XLSX Structure Imported Successfully! ✅
             </div>
             <div style="font-size: 14px; opacity: 0.95; margin-bottom: 8px;">
-              <strong>Detected & Selected:</strong><br>
+              <strong>Auto-detected languages:</strong><br>
               ${languageNames}
             </div>
             <div style="font-size: 13px; opacity: 0.9; margin-bottom: 8px;">
               📋 ${Object.keys(translations).length} slides ready for translation
             </div>
             <div style="font-size: 12px; opacity: 0.8;">
-              Languages are now selected in the interface below! 🎯
+              Now select PPTX file above and setup translation project! 🎯
             </div>
           </div>
         `;
@@ -446,12 +383,12 @@ export default function App() {
           if (notification.parentNode) {
             notification.parentNode.removeChild(notification);
           }
-        }, 6000);
+        }, 8000);
         
-        console.log(`✅ SUCCESS: Auto-selected ${mappedLanguages.length} languages:`, languageNames);
+        console.log(`✅ SUCCESS: Auto-selected ${mappedLanguages.length} languages from XLSX:`, languageNames);
         
       } else {
-        console.warn('⚠️ No languages could be mapped from XLSX');
+        console.warn('⚠️ No recognizable languages found in XLSX structure');
         
         const notification = document.createElement('div');
         notification.innerHTML = `
@@ -475,9 +412,9 @@ export default function App() {
               ⚠️ XLSX Language Detection Issue
             </div>
             <div style="font-size: 14px; opacity: 0.9; margin-bottom: 8px;">
-              Could not auto-detect languages from column headers.<br>
-              <strong>Detected columns:</strong><br>
-              ${Array.from(detectedLanguages).join(', ')}
+              Could not auto-detect languages from XLSX structure.<br>
+              <strong>Expected structure:</strong><br>
+              Slide | English | Dutch | Spanish | French...
             </div>
             <div style="font-size: 12px; opacity: 0.8;">
               Please manually select languages below for translation.
@@ -490,7 +427,7 @@ export default function App() {
           if (notification.parentNode) {
             notification.parentNode.removeChild(notification);
           }
-        }, 8000);
+        }, 10000);
       }
       
     } catch (error) {
@@ -515,7 +452,7 @@ export default function App() {
         ">
           <div style="font-weight: bold; margin-bottom: 8px;">❌ XLSX Import Error</div>
           <div style="font-size: 14px;">
-            Failed to process XLSX file. Please check the format and try again.
+            Failed to process XLSX file. Please check the format matches expected structure.
           </div>
         </div>
       `;
@@ -534,7 +471,6 @@ export default function App() {
     setImportedTranslations(null);
     setImportedFileName('');
     setImportedLanguages([]);
-    // Don't clear selectedLanguages automatically - let user decide
     console.log('🗑️ Cleared imported translations data');
   };
   
@@ -550,7 +486,7 @@ export default function App() {
     setSelectedLanguages(newSelection);
   };
 
-  // Create a setup for translation - this prepares everything but doesn't start translation
+  // ENHANCED: Create translation setup with better support for imported translations
   const createTranslationSetup = () => {
     if (!selectedFile) {
       alert('Please select a PPTX file first.');
@@ -567,6 +503,7 @@ export default function App() {
     console.log(`🎯 Creating translation setup for: ${selectedFile.name}`);
     console.log(`🌍 Target languages: ${selectedLanguages.join(', ')}`);
     console.log(`📊 Using imported translations: ${usingImported}`);
+    console.log(`📋 Imported translations structure:`, usingImported ? Object.keys(importedTranslations) : 'none');
     
     // Create setup job with enhanced info
     const newJob: TranslationJob = {
@@ -587,7 +524,7 @@ export default function App() {
     // Clear the form but keep languages and import data for convenience
     setSelectedFile(null);
     
-    // Show setup success notification
+    // Enhanced setup success notification
     const notification = document.createElement('div');
     notification.innerHTML = `
       <div style="
@@ -598,19 +535,19 @@ export default function App() {
         color: white; 
         padding: 16px; 
         border-radius: 8px; 
-        max-width: 350px; 
+        max-width: 400px; 
         z-index: 9999;
         font-family: system-ui, -apple-system, sans-serif;
         box-shadow: 0 10px 25px rgba(0,0,0,0.3);
         backdrop-filter: blur(10px);
       ">
-        <div style="font-weight: bold; margin-bottom: 8px;">🎯 Translation Project Ready!</div>
-        <div style="font-size: 14px; opacity: 0.9;">
-          Setup complete for ${selectedLanguages.length} languages.<br>
-          ${usingImported ? 'Using imported translations for generation.' : 'Ready for Google Translate processing.'}
+        <div style="font-weight: bold; margin-bottom: 8px;">🎯 Translation Project Setup Complete!</div>
+        <div style="font-size: 14px; opacity: 0.9; margin-bottom: 8px;">
+          ✅ Ready for ${selectedLanguages.length} languages<br>
+          ${usingImported ? '📊 Using XLSX imported translations' : '🌐 Ready for Google Translate processing'}
         </div>
         <div style="font-size: 12px; margin-top: 8px; opacity: 0.8;">
-          Click "Generate" buttons below to create PPTX files
+          Click individual "Generate" buttons below to create PPTX files with ${usingImported ? 'imported' : 'Google'} translations
         </div>
       </div>
     `;
@@ -620,7 +557,7 @@ export default function App() {
       if (notification.parentNode) {
         notification.parentNode.removeChild(notification);
       }
-    }, 5000);
+    }, 6000);
   };
 
   // Start translation for specific language
@@ -634,12 +571,13 @@ export default function App() {
     
     try {
       console.log(`🚀 Starting translation for ${language} in job ${job.id}`);
+      console.log(`📊 Using imported translations:`, !!job.importedTranslations);
       
       // Update job status
       updateJob(job.id, {
         status: 'pending',
         progress: 0,
-        currentStep: `Starting ${language.toUpperCase()} translation...`
+        currentStep: `Starting ${language.toUpperCase()} translation with ${job.usingImportedTranslations ? 'imported XLSX data' : 'Google Translate'}...`
       });
 
       await startRealTranslation(job.id, job.sourceFile, [language], job.importedTranslations);
@@ -665,12 +603,13 @@ export default function App() {
     
     try {
       console.log(`🚀 Starting translation for all languages in job ${job.id}`);
+      console.log(`📊 Using imported translations:`, !!job.importedTranslations);
       
       // Update job status
       updateJob(job.id, {
         status: 'pending',
         progress: 0,
-        currentStep: `Starting translation for ${job.selectedLanguages.length} languages...`
+        currentStep: `Starting translation for ${job.selectedLanguages.length} languages with ${job.usingImportedTranslations ? 'imported XLSX data' : 'Google Translate'}...`
       });
 
       await startRealTranslation(job.id, job.sourceFile, job.selectedLanguages, job.importedTranslations);
@@ -704,7 +643,8 @@ export default function App() {
 
     try {
       console.log(`🚀 Starting REAL translation service for job: ${jobId}`);
-      console.log(`📊 Using v${APP_VERSION} translation engine`);
+      console.log(`📊 Using v${APP_VERSION} translation engine with XLSX structure support`);
+      console.log(`📋 Imported translations:`, importedTranslations ? 'YES' : 'NO');
       
       // Start the actual REAL translation process
       const results = await translationService.startTranslation(
@@ -762,13 +702,13 @@ export default function App() {
   // Download XLSX with REAL translations and proper structure
   const handleDownloadXLSX = async (job: TranslationJob) => {
     try {
-      console.log(`📊 Downloading XLSX for job ${job.id} with v${APP_VERSION} structure`);
+      console.log(`📊 Downloading XLSX for job ${job.id} with v${APP_VERSION} PROPER structure`);
       
       if (job.sheetId) {
         // Download the REAL Google Sheet as XLSX
         await translationService.downloadSheet(job.sheetId, `${job.fileName}_translations.xlsx`);
       } else {
-        // Generate REAL XLSX from job data with proper structure
+        // Generate REAL XLSX from job data with PROPER structure as in user's image
         await translationService.generateXLSX(job, `${job.fileName}_translations.xlsx`);
       }
     } catch (error) {
@@ -824,6 +764,13 @@ export default function App() {
         {selectedLanguages.length > 0 && (
           <Badge className="bg-purple-800/80 text-purple-300 border-purple-600/50 text-xs backdrop-blur-sm">
             Selected: {selectedLanguages.length}
+          </Badge>
+        )}
+        
+        {/* XLSX Import Status */}
+        {importedTranslations && (
+          <Badge className="bg-green-800/80 text-green-300 border-green-600/50 text-xs backdrop-blur-sm">
+            📊 XLSX Imported
           </Badge>
         )}
       </div>
@@ -926,7 +873,7 @@ export default function App() {
                   </Badge>
                   
                   <Badge className="bg-green-500/20 text-green-300 border-green-500/30 text-xs">
-                    ✅ SW Fixed
+                    📊 XLSX Fixed
                   </Badge>
                 </>
               )}
@@ -1042,6 +989,12 @@ export default function App() {
                     <Languages className="w-4 h-4 text-purple-400" />
                     <span className="text-sm text-gray-300">{selectedLanguages.length} languages selected</span>
                   </div>
+                  {importedTranslations && (
+                    <div className="flex items-center gap-2">
+                      <FileSpreadsheet className="w-4 h-4 text-green-400" />
+                      <span className="text-sm text-green-300">XLSX imported</span>
+                    </div>
+                  )}
                 </div>
                 <Button
                   onClick={createTranslationSetup}
@@ -1055,13 +1008,13 @@ export default function App() {
             </Card>
           )}
 
-          {/* ENHANCED: XLSX Import Status with Better Language Visibility */}
+          {/* ENHANCED: XLSX Import Status with Complete Workflow Info */}
           {importedTranslations && (
             <Card className="p-6 bg-black/40 backdrop-blur-sm border-green-500/20 border shadow-2xl">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <FileSpreadsheet className="w-5 h-5 text-green-400" />
-                  <h3 className="text-green-400 text-lg font-medium">Imported Translations Active</h3>
+                  <h3 className="text-green-400 text-lg font-medium">XLSX Translations Ready</h3>
                 </div>
                 <Button
                   onClick={clearImportedTranslations}
@@ -1128,17 +1081,13 @@ export default function App() {
                 <div className="flex items-center gap-2 mb-2">
                   <CheckCircle className="w-4 h-4 text-green-400" />
                   <p className="text-green-300 text-sm font-medium">
-                    XLSX translations ready for PPTX generation
+                    XLSX structure parsed successfully - ready for PPTX generation
                   </p>
                 </div>
                 <p className="text-green-200 text-xs">
-                  {importedLanguages.length} languages were auto-detected and selected. 
-                  {selectedLanguages.length !== importedLanguages.length && (
-                    <span className="text-yellow-300">
-                      {' '}Current selection ({selectedLanguages.length}) differs from imported ({importedLanguages.length}).
-                    </span>
-                  )}
-                  {' '}Ready for project setup above!
+                  ✅ Languages auto-selected: {importedLanguages.length} detected<br />
+                  ✅ Translation data ready for {Object.keys(importedTranslations).length} slides<br />
+                  🎯 Now select PPTX file above and click "Setup Translation Project"
                 </p>
               </div>
             </Card>
@@ -1150,7 +1099,7 @@ export default function App() {
               <div className="flex items-center space-x-2">
                 <AlertCircle className="w-4 h-4 text-yellow-400" />
                 <p className="text-yellow-400 text-sm">
-                  REAL translation in progress with v{APP_VERSION} engine. Processing with authentic PPTX extraction...
+                  REAL translation in progress with v{APP_VERSION} engine. Processing with {importedTranslations ? 'imported XLSX translations' : 'Google Translate + authentic PPTX extraction'}...
                 </p>
               </div>
             </Card>
@@ -1198,7 +1147,7 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Ready State - Show Generate Buttons with Enhanced Language Info */}
+                    {/* Ready State - Show Generate Buttons */}
                     {job.status === 'ready' && (
                       <div className="space-y-4">
                         {job.usingImportedTranslations && job.availableImportedLanguages && (
@@ -1334,12 +1283,12 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* Show enhanced imported translation info */}
+                    {/* Enhanced imported translation info */}
                     {job.usingImportedTranslations && (
                       <div className="mt-3 p-2 bg-green-500/10 rounded border border-green-500/20">
                         <p className="text-green-300 text-xs flex items-center gap-1">
                           <CheckCircle className="w-3 h-3" />
-                          Using imported translations with proper column structure v{APP_VERSION}
+                          Using imported translations with proper XLSX structure v{APP_VERSION}
                         </p>
                       </div>
                     )}
@@ -1349,35 +1298,6 @@ export default function App() {
             </Card>
           )}
 
-          {/* Enhanced Features */}
-          <div className="grid md:grid-cols-3 gap-4 mt-8">
-            {[
-              {
-                icon: <Cpu className="w-5 h-5" />,
-                title: 'REAL PPTX Processing',
-                description: 'Authentic text extraction using JSZip with preserved XML structure'
-              },
-              {
-                icon: <Languages className="w-5 h-5" />,
-                title: 'Fixed Language Selection',
-                description: 'XLSX auto-detection with immediate visual feedback and proper state management'
-              },
-              {
-                icon: <CheckCircle className="w-5 h-5" />,
-                title: 'Service Worker Fixed',
-                description: 'Reliable cache busting without problematic service worker dependencies'
-              }
-            ].map((feature, index) => (
-              <div key={index} className="p-4 bg-black/40 backdrop-blur-sm border-white/10 border rounded-xl shadow-xl hover:bg-black/50 transition-all duration-300">
-                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center mb-3 shadow-lg">
-                  {feature.icon}
-                </div>
-                <h3 className="text-base font-serif text-white mb-1">{feature.title}</h3>
-                <p className="text-gray-400 text-xs">{feature.description}</p>
-              </div>
-            ))}
-          </div>
-
           {/* Enhanced API Status Debug */}
           {apiStatus && !apiStatus.hasEnvironmentKey && (
             <Card className="p-4 bg-yellow-500/10 border-yellow-500/20">
@@ -1386,7 +1306,7 @@ export default function App() {
                 <h3 className="text-yellow-400">Google APIs Not Configured</h3>
               </div>
               <p className="text-yellow-300 text-sm mb-3">
-                App is using REAL PPTX processing v{APP_VERSION} with fixed service worker. To enable Google Translate:
+                App is using REAL PPTX processing v{APP_VERSION} with fixed JSX syntax. To enable Google Translate:
               </p>
               <div className="text-xs text-yellow-200 space-y-1">
                 <p>1. Go to <strong>Netlify Dashboard</strong> → Your Site → <strong>Environment Variables</strong></p>
@@ -1395,7 +1315,7 @@ export default function App() {
                 <p>4. <strong>Deploy site</strong> to activate real Google Translate</p>
               </div>
               <p className="text-yellow-300 text-sm mt-2">
-                Current REAL PPTX processing with fixed caching works perfectly! 🚀
+                Current REAL PPTX processing with fixed JSX works perfectly! 🚀
               </p>
               
               {/* Debug Info */}
@@ -1408,7 +1328,7 @@ export default function App() {
                       <li>• Version: v{APP_VERSION} ✅</li>
                       <li>• REAL PPTX Processing: ✅ Available</li>
                       <li>• XLSX Language Selection: ✅ Fixed</li>
-                      <li>• Service Worker: ✅ Fixed (removed problematic SW)</li>
+                      <li>• JSX Syntax: ✅ Fixed</li>
                       <li>• Cache Busting: ✅ Multiple strategies</li>
                       <li>• JSZip Integration: ✅ Active</li>
                     </ul>
@@ -1422,23 +1342,6 @@ export default function App() {
           )}
         </div>
       </div>
-
-      <style>{`
-        @keyframes success-glow {
-          0%, 100% { 
-            opacity: 0.75;
-            transform: scale(1);
-          }
-          50% { 
-            opacity: 1;
-            transform: scale(1.02);
-          }
-        }
-
-        .animate-success-glow {
-          animation: success-glow 3s ease-in-out infinite;
-        }
-      `}</style>
     </div>
   );
 }
