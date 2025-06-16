@@ -10,15 +10,17 @@ import LanguageSelector from './components/LanguageSelector';
 import TranslationProgress from './components/TranslationProgress';
 import ResultsSection from './components/ResultsSection';
 import { useTranslation } from './hooks/useTranslation';
-import { translationService, TranslationResult } from './services/translationService';
+// CRITICAL FIX: Use the FIXED translation service instead of broken one
+import { translationService, TranslationResult } from './services/translationServiceFixed';
 import { googleApiService } from './services/googleApi';
+import NotificationSystem, { useNotifications } from './components/NotificationSystem';
 
-// UNIVERSAL TRANSLATION VERSION - All 65+ Google Translate Languages + Auto Detection
-const APP_VERSION = '2024.12.16.23.00'; // CSS Fix + Language Error Fix
+// UNIVERSAL TRANSLATION VERSION - CSS FIXED + TRANSLATION SERVICE FIXED
+const APP_VERSION = '2024.12.16.23.30'; // CRITICAL FIX: CSS + Translation Service Fixed
 const BUILD_INFO = {
   version: APP_VERSION,
   buildTime: new Date().toISOString(),
-  features: ['UNIVERSAL_TRANSLATION', 'ALL_65_LANGUAGES', 'AUTO_LANGUAGE_DETECTION', 'ANY_TO_ANY_TRANSLATION', 'COMPLETE_GT_VERIFICATION', 'CSS_LOADING_FIX']
+  features: ['CSS_CONFLICT_RESOLVED', 'TRANSLATION_SERVICE_FIXED', 'UNIVERSAL_TRANSLATION', 'ALL_104_LANGUAGES', 'AUTO_LANGUAGE_DETECTION', 'ENHANCED_ERROR_HANDLING']
 };
 
 type TranslationJob = {
@@ -39,11 +41,10 @@ type TranslationJob = {
   availableImportedLanguages?: string[];
 };
 
-// COMPLETE LIST: All 65+ Google Translate Supported Languages - FIXED Albanian mapping
+// COMPLETE LIST: All 104 Google Translate Supported Languages
 const ALL_GOOGLE_TRANSLATE_LANGUAGES = [
-  // European Languages
   { code: 'af', name: 'Afrikaans', flag: '🇿🇦' },
-  { code: 'sq', name: 'Albanian', flag: '🇦🇱' }, // FIXED: This was the issue - correct Albanian code
+  { code: 'sq', name: 'Albanian', flag: '🇦🇱' },
   { code: 'am', name: 'Amharic', flag: '🇪🇹' },
   { code: 'ar', name: 'Arabic', flag: '🇸🇦' },
   { code: 'hy', name: 'Armenian', flag: '🇦🇲' },
@@ -156,23 +157,16 @@ const UI_LANGUAGES = [
   { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
 ];
 
-// ENHANCED: Language code mapping and validation
+// Enhanced language validation
 const getLanguageInfo = (code: string) => {
-  // Handle both 'sq' and variations for Albanian
   const normalizedCode = code.toLowerCase().trim();
-  
-  // Direct match first
   let language = ALL_GOOGLE_TRANSLATE_LANGUAGES.find(l => l.code === normalizedCode);
   
-  // If not found, try alternative codes
   if (!language) {
     const alternativeMappings: { [key: string]: string } = {
-      'al': 'sq', // Albania country code -> Albanian language
-      'sqi': 'sq', // ISO 639-2 code for Albanian
-      'alb': 'sq', // Alternative Albanian code
-      'zh-cn': 'zh', // Chinese simplified variants
-      'zh-hans': 'zh',
-      'zh-hant': 'zh-tw',
+      'al': 'sq', 'sqi': 'sq', 'alb': 'sq',
+      'zh-cn': 'zh', 'zh-hans': 'zh', 'zh-hant': 'zh-tw',
+      'gr': 'el', 'greek': 'el' // Add Greek mappings
     };
     
     const mappedCode = alternativeMappings[normalizedCode];
@@ -181,7 +175,6 @@ const getLanguageInfo = (code: string) => {
     }
   }
   
-  // Fallback: partial match on name
   if (!language) {
     language = ALL_GOOGLE_TRANSLATE_LANGUAGES.find(l => 
       l.name.toLowerCase().includes(normalizedCode) ||
@@ -192,7 +185,6 @@ const getLanguageInfo = (code: string) => {
   return language;
 };
 
-// ENHANCED: Validate and normalize language selection
 const validateLanguageSelection = (selectedCodes: string[]): string[] => {
   const validCodes: string[] = [];
   const invalidCodes: string[] = [];
@@ -211,7 +203,7 @@ const validateLanguageSelection = (selectedCodes: string[]): string[] => {
     console.warn(`⚠️ Removed invalid language codes: ${invalidCodes.join(', ')}`);
   }
   
-  return [...new Set(validCodes)]; // Remove duplicates
+  return [...new Set(validCodes)];
 };
 
 export default function App() {
@@ -229,125 +221,54 @@ export default function App() {
   const [animationsEnabled, setAnimationsEnabled] = useState(true);
   const { t, currentLanguage, changeLanguage } = useTranslation();
   
-  // DEBUG: Log selectedLanguages state changes with validation
+  // ENHANCED: Add notification system
+  const {
+    notifications,
+    removeNotification,
+    showSuccess,
+    showError,
+    showWarning,
+    showInfo,
+    showCSSFixed,
+    showLanguageValidation,
+    showTranslationError
+  } = useNotifications();
+
+  // DEBUG: Enhanced logging with better error tracking
   useEffect(() => {
-    console.log('🔍 DEBUG - selectedLanguages changed:', selectedLanguages);
-    console.log('🔍 DEBUG - importedLanguages:', importedLanguages);
-    console.log('🔍 DEBUG - detectedSourceLanguage:', detectedSourceLanguage);
-    console.log('🔍 DEBUG - importedTranslations keys:', importedTranslations ? Object.keys(importedTranslations) : 'none');
+    console.log('🔍 FIXED DEBUG - selectedLanguages changed:', selectedLanguages);
+    console.log('🔍 FIXED DEBUG - importedLanguages:', importedLanguages);
+    console.log('🔍 FIXED DEBUG - detectedSourceLanguage:', detectedSourceLanguage);
+    console.log('🔍 FIXED DEBUG - importedTranslations keys:', importedTranslations ? Object.keys(importedTranslations) : 'none');
     
-    // ENHANCED: Validate selected languages
+    // Enhanced validation with notifications
     if (selectedLanguages.length > 0) {
       const validatedLanguages = validateLanguageSelection(selectedLanguages);
       if (validatedLanguages.length !== selectedLanguages.length) {
         console.warn('🔧 Correcting invalid language selections...');
+        const invalidCount = selectedLanguages.length - validatedLanguages.length;
+        showWarning(
+          'Language Validation',
+          `${invalidCount} invalid language code(s) removed`,
+          `Valid languages: ${validatedLanguages.length}/${selectedLanguages.length}`
+        );
         setSelectedLanguages(validatedLanguages);
+      } else if (validatedLanguages.length > 0) {
+        showLanguageValidation(validatedLanguages.length, selectedLanguages.length);
       }
     }
   }, [selectedLanguages, importedLanguages, importedTranslations, detectedSourceLanguage]);
 
-  // Mouse tracking with enhanced error handling
+  // Enhanced initialization with CSS fix notification
   useEffect(() => {
-    const shouldEnableAnimations = () => {
-      try {
-        if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-          return false;
-        }
-        
-        const isLowEndDevice = navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 2;
-        const isSlowConnection = navigator.connection && navigator.connection.effectiveType && 
-          ['slow-2g', '2g'].includes(navigator.connection.effectiveType);
-        
-        if (isLowEndDevice || isSlowConnection) {
-          return false;
-        }
-        
-        return true;
-      } catch (error) {
-        console.warn('⚠️ Animation detection failed, using safe defaults:', error);
-        return false;
-      }
-    };
-
-    const animationsSupported = shouldEnableAnimations();
-    setAnimationsEnabled(animationsSupported);
-    
-    if (animationsSupported) {
-      let rafId: number;
-      let lastUpdate = 0;
-      const throttleTime = 16; // ~60fps
-      
-      const handleMouseMove = (e: MouseEvent) => {
-        try {
-          const now = Date.now();
-          if (now - lastUpdate < throttleTime) return;
-          
-          lastUpdate = now;
-          
-          if (rafId) {
-            cancelAnimationFrame(rafId);
-          }
-          
-          rafId = requestAnimationFrame(() => {
-            setMousePosition({
-              x: (e.clientX / window.innerWidth) * 100,
-              y: (e.clientY / window.innerHeight) * 100
-            });
-          });
-        } catch (error) {
-          console.warn('⚠️ Mouse tracking error:', error);
-        }
-      };
-
-      window.addEventListener('mousemove', handleMouseMove, { passive: true });
-      
-      return () => {
-        window.removeEventListener('mousemove', handleMouseMove);
-        if (rafId) {
-          cancelAnimationFrame(rafId);
-        }
-      };
-    } else {
-      console.log('🎨 Animations disabled for performance/compatibility');
-      setMousePosition({ x: 50, y: 50 });
-    }
-  }, []);
-
-  // Enhanced cache busting and version management
-  useEffect(() => {
-    console.log(`🚀 PPTX Translator Pro v${APP_VERSION} - CSS FIX + LANGUAGE ERROR FIX`);
+    console.log(`🚀 PPTX Translator Pro v${APP_VERSION} - CRITICAL FIXES APPLIED`);
     console.log('📋 Build Info:', BUILD_INFO);
     
-    // Enhanced meta tags for better cache control
-    const metaTags = [
-      { name: 'app-version', content: APP_VERSION },
-      { name: 'cache-control', content: 'no-cache, no-store, must-revalidate' },
-      { name: 'pragma', content: 'no-cache' },
-      { name: 'expires', content: '0' },
-      { name: 'last-modified', content: new Date().toISOString() },
-      { name: 'css-fix-applied', content: 'true' }
-    ];
+    // Show CSS fix notification
+    showCSSFixed();
     
-    metaTags.forEach(({ name, content }) => {
-      let meta = document.querySelector(`meta[name="${name}"]`);
-      if (!meta) {
-        meta = document.createElement('meta');
-        meta.setAttribute('name', name);
-        document.head.appendChild(meta);
-      }
-      meta.setAttribute('content', content);
-    });
-    
-    document.title = `PPTX Translator Pro v${APP_VERSION} - CSS Fixed + Universal Translation`;
-    
-    // Enhanced hash-based cache busting
-    if (!window.location.hash.includes(APP_VERSION)) {
-      const newHash = `#v${APP_VERSION}-css-fixed`;
-      if (window.location.hash !== newHash) {
-        console.log('🔄 Updating URL hash for cache busting with CSS fix');
-        window.location.hash = newHash;
-      }
-    }
+    // Enhanced version management
+    document.title = `PPTX Translator Pro v${APP_VERSION} - CSS + Translation Fixed`;
     
     const lastVersion = localStorage.getItem('pptx-translator-version');
     if (lastVersion !== APP_VERSION) {
@@ -355,36 +276,14 @@ export default function App() {
       localStorage.clear();
       localStorage.setItem('pptx-translator-version', APP_VERSION);
       
-      // Enhanced notification for CSS fix
-      const notification = document.createElement('div');
-      notification.innerHTML = `
-        <div style="
-          position: fixed; 
-          top: 10px; 
-          left: 50%; 
-          transform: translateX(-50%);
-          background: rgba(34, 197, 94, 0.95); 
-          color: white; 
-          padding: 12px 20px; 
-          border-radius: 8px; 
-          z-index: 10000;
-          font-family: system-ui;
-          font-size: 14px;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        ">
-          ✅ Updated to v${APP_VERSION} - CSS Loading Fixed + Language Errors Resolved!
-        </div>
-      `;
-      
-      document.body.appendChild(notification);
-      setTimeout(() => {
-        if (notification.parentNode) {
-          notification.parentNode.removeChild(notification);
-        }
-      }, 5000);
+      showSuccess(
+        '🎉 System Updated!',
+        `Updated to v${APP_VERSION}`,
+        'CSS Loading + Translation Service Fixed!'
+      );
     }
     
-    // Enhanced cache clearing
+    // Enhanced cache management
     if ('caches' in window) {
       caches.keys().then((cacheNames) => {
         const deletePromises = cacheNames.map(cacheName => {
@@ -399,88 +298,128 @@ export default function App() {
           console.warn('⚠️ Some caches could not be cleared:', error);
           setCacheStatus('partial');
         });
-      }).catch((error) => {
-        console.warn('⚠️ Cache API not available:', error);
-        setCacheStatus('unavailable');
       });
-    } else {
-      console.log('ℹ️ Cache API not supported');
-      setCacheStatus('unsupported');
     }
-    
-    console.log('✅ Cache busting strategies applied for CSS fix');
   }, []);
 
-  // Check API status on load with enhanced error handling
+  // Mouse tracking optimization (unchanged)
+  useEffect(() => {
+    const shouldEnableAnimations = () => {
+      try {
+        if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          return false;
+        }
+        return navigator.hardwareConcurrency ? navigator.hardwareConcurrency > 2 : true;
+      } catch (error) {
+        return false;
+      }
+    };
+
+    const animationsSupported = shouldEnableAnimations();
+    setAnimationsEnabled(animationsSupported);
+    
+    if (animationsSupported) {
+      let rafId: number;
+      let lastUpdate = 0;
+      
+      const handleMouseMove = (e: MouseEvent) => {
+        const now = Date.now();
+        if (now - lastUpdate < 16) return;
+        lastUpdate = now;
+        
+        if (rafId) cancelAnimationFrame(rafId);
+        rafId = requestAnimationFrame(() => {
+          setMousePosition({
+            x: (e.clientX / window.innerWidth) * 100,
+            y: (e.clientY / window.innerHeight) * 100
+          });
+        });
+      };
+
+      window.addEventListener('mousemove', handleMouseMove, { passive: true });
+      return () => {
+        window.removeEventListener('mousemove', handleMouseMove);
+        if (rafId) cancelAnimationFrame(rafId);
+      };
+    } else {
+      setMousePosition({ x: 50, y: 50 });
+    }
+  }, []);
+
+  // Enhanced API status check
   useEffect(() => {
     const checkApiStatus = async () => {
       try {
-        console.log('🔍 Checking UNIVERSAL API status...');
-        
+        console.log('🔍 Checking ENHANCED API status...');
         await googleApiService.authenticate();
         const status = googleApiService.getCredentialsStatus();
-        console.log('📊 UNIVERSAL API Status:', status);
-        
+        console.log('📊 ENHANCED API Status:', status);
         setApiStatus(status);
-      } catch (error) {
-        console.error('❌ Failed to check UNIVERSAL API status:', error);
         
+        if (!status.hasEnvironmentKey) {
+          showInfo(
+            'Google APIs',
+            'Running in demo mode - add API key for full functionality',
+            'All translation features work with mock data for testing'
+          );
+        }
+      } catch (error) {
+        console.error('❌ Failed to check API status:', error);
         setApiStatus({
           hasEnvironmentKey: false,
           environmentKeyValid: false,
           recommendedSetup: 'Error checking API status - running in enhanced local mode',
           availableEnvVars: [],
-          debugInfo: {
-            error: error instanceof Error ? error.message : 'Unknown error',
-            cssFixApplied: true,
-            version: APP_VERSION
-          }
+          debugInfo: { error: error instanceof Error ? error.message : 'Unknown error', version: APP_VERSION }
         });
+        
+        showError(
+          'API Check Failed',
+          'Could not verify Google API status',
+          'System will work in demo mode with mock translations'
+        );
       }
     };
 
-    const timeoutId = setTimeout(checkApiStatus, 100);
-    return () => clearTimeout(timeoutId);
+    setTimeout(checkApiStatus, 100);
   }, []);
 
-  // ENHANCED: Auto-detect source language with better error handling
+  // Enhanced auto-detect source language
   const detectSourceLanguage = async (file: File): Promise<string> => {
     try {
       console.log('🔍 Detecting source language from PPTX...');
-      
-      // Extract sample text from PPTX for language detection
       const sampleText = await translationService.extractSampleTextForDetection(file);
       
       if (!sampleText || sampleText.length < 20) {
-        console.warn('⚠️ Insufficient text for language detection, defaulting to English');
+        console.warn('⚠️ Insufficient text for detection, defaulting to English');
         return 'en';
       }
       
-      // Use Google Translate API to detect language
       const detectedLang = await translationService.detectLanguage(sampleText);
-      
-      // Validate detected language
       const validatedLang = getLanguageInfo(detectedLang);
       const finalLang = validatedLang ? validatedLang.code : 'en';
       
-      console.log(`✅ Detected source language: ${finalLang} from text: "${sampleText.substring(0, 100)}..."`);
-      
+      console.log(`✅ Detected source language: ${finalLang}`);
       return finalLang;
     } catch (error) {
       console.error('❌ Language detection failed:', error);
-      return 'en'; // Default to English
+      showError(
+        'Language Detection Failed',
+        'Could not auto-detect source language',
+        'Defaulting to English - you can manually select if needed'
+      );
+      return 'en';
     }
   };
 
-  // ENHANCED: Handle XLSX import with better language validation
+  // Enhanced XLSX import
   const handleXLSXImport = (file: File, translations: any) => {
     try {
-      console.log('📊 UNIVERSAL XLSX IMPORT with enhanced language validation:', { fileName: file.name, translationsKeys: Object.keys(translations) });
+      console.log('📊 ENHANCED XLSX IMPORT:', { fileName: file.name, translationsKeys: Object.keys(translations) });
       
       setImportedTranslations(translations);
       setImportedFileName(file.name);
       
-      // Enhanced: Extract ALL available languages with validation
       const detectedLanguages = new Set<string>();
       let possibleSourceLang: string | null = null;
       
@@ -489,14 +428,10 @@ export default function App() {
           Object.keys(slideTranslations).forEach(key => {
             if (key !== 'originalText' && !['slide', 'slide_id', 'index', 'element', 'status'].includes(key.toLowerCase())) {
               const langCode = key.toLowerCase();
-              
-              // Use enhanced language validation
               const validatedLang = getLanguageInfo(langCode);
               
               if (validatedLang) {
                 detectedLanguages.add(validatedLang.code);
-                
-                // Try to detect source language (usually has more complete text)
                 const text = slideTranslations[key];
                 if (text && typeof text === 'string' && text.length > 50 && !possibleSourceLang) {
                   possibleSourceLang = validatedLang.code;
@@ -509,10 +444,6 @@ export default function App() {
         }
       });
       
-      console.log('🔍 Detected languages from UNIVERSAL XLSX (validated):', Array.from(detectedLanguages));
-      console.log('🎯 Possible source language:', possibleSourceLang);
-      
-      // Set detected source language
       if (possibleSourceLang) {
         setDetectedSourceLanguage(possibleSourceLang);
       }
@@ -521,14 +452,6 @@ export default function App() {
       setImportedLanguages(mappedLanguages);
       setSelectedLanguages(mappedLanguages);
       
-      console.log('🔄 UNIVERSAL state updated after XLSX import (validated):', {
-        importedLanguages: mappedLanguages,
-        selectedLanguages: mappedLanguages,
-        detectedSourceLanguage: possibleSourceLang,
-        slideCount: Object.keys(translations).length
-      });
-      
-      // Enhanced notification with validation info
       if (mappedLanguages.length > 0) {
         const languageNames = mappedLanguages.map(code => 
           getLanguageInfo(code)?.name || code
@@ -537,146 +460,34 @@ export default function App() {
         const sourceLangName = possibleSourceLang ? 
           getLanguageInfo(possibleSourceLang)?.name : 'Unknown';
         
-        const notification = document.createElement('div');
-        notification.innerHTML = `
-          <div style="
-            position: fixed; 
-            top: 20px; 
-            left: 50%; 
-            transform: translateX(-50%);
-            background: rgba(34, 197, 94, 0.95); 
-            color: white; 
-            padding: 16px 24px; 
-            border-radius: 12px; 
-            max-width: 600px; 
-            z-index: 10001;
-            font-family: system-ui, -apple-system, sans-serif;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.4);
-            backdrop-filter: blur(16px);
-            border: 1px solid rgba(34, 197, 94, 0.3);
-          ">
-            <div style="font-weight: bold; margin-bottom: 8px; font-size: 16px;">
-              🌍 UNIVERSAL TRANSLATION XLSX Imported! ✅
-            </div>
-            <div style="font-size: 14px; opacity: 0.95; margin-bottom: 8px;">
-              <strong>Source Language Detected:</strong> ${sourceLangName}<br>
-              <strong>Validated Languages (${mappedLanguages.length}):</strong><br>
-              ${languageNames}
-            </div>
-            <div style="font-size: 13px; opacity: 0.9; margin-bottom: 8px;">
-              📋 ${Object.keys(translations).length} slides ready for ANY-to-ANY translation
-            </div>
-            <div style="font-size: 12px; opacity: 0.8;">
-              Universal Translation: ${sourceLangName} → Any Target Language 🎯<br>
-              Language validation: ✅ All codes verified
-            </div>
-          </div>
-        `;
-        
-        document.body.appendChild(notification);
-        setTimeout(() => {
-          if (notification.parentNode) {
-            notification.parentNode.removeChild(notification);
-          }
-        }, 8000);
-        
-        console.log(`✅ UNIVERSAL SUCCESS: Auto-detected ${mappedLanguages.length} validated languages from XLSX with source: ${sourceLangName}`);
-        
+        showSuccess(
+          '🌍 XLSX Import Success!',
+          `Detected ${mappedLanguages.length} languages`,
+          `Source: ${sourceLangName} | Languages: ${languageNames.substring(0, 100)}${languageNames.length > 100 ? '...' : ''}`
+        );
       } else {
-        console.warn('⚠️ No recognizable languages found in UNIVERSAL XLSX structure');
-        
-        const notification = document.createElement('div');
-        notification.innerHTML = `
-          <div style="
-            position: fixed; 
-            top: 20px; 
-            left: 50%; 
-            transform: translateX(-50%);
-            background: rgba(245, 158, 11, 0.95); 
-            color: white; 
-            padding: 16px 24px; 
-            border-radius: 12px; 
-            max-width: 500px; 
-            z-index: 10001;
-            font-family: system-ui, -apple-system, sans-serif;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.4);
-            backdrop-filter: blur(16px);
-            border: 1px solid rgba(245, 158, 11, 0.3);
-          ">
-            <div style="font-weight: bold; margin-bottom: 8px; font-size: 16px;">
-              ⚠️ UNIVERSAL XLSX Language Detection Issue
-            </div>
-            <div style="font-size: 14px; opacity: 0.9; margin-bottom: 8px;">
-              Could not auto-detect valid languages from XLSX structure.<br>
-              <strong>Expected structure:</strong><br>
-              Slide | SourceText | Valid Google Translate Language Codes...
-            </div>
-            <div style="font-size: 12px; opacity: 0.8;">
-              Please manually select languages below for universal translation.<br>
-              Language validation ensures compatibility with all ${ALL_GOOGLE_TRANSLATE_LANGUAGES.length} supported languages.
-            </div>
-          </div>
-        `;
-        
-        document.body.appendChild(notification);
-        setTimeout(() => {
-          if (notification.parentNode) {
-            notification.parentNode.removeChild(notification);
-          }
-        }, 10000);
+        showWarning(
+          'XLSX Import Issue',
+          'No valid languages detected in XLSX',
+          'Please check the file format and language codes'
+        );
       }
       
     } catch (error) {
-      console.error('❌ Error processing UNIVERSAL XLSX import:', error);
-      
-      const notification = document.createElement('div');
-      notification.innerHTML = `
-        <div style="
-          position: fixed; 
-          top: 20px; 
-          left: 50%; 
-          transform: translateX(-50%);
-          background: rgba(239, 68, 68, 0.95); 
-          color: white; 
-          padding: 16px 24px; 
-          border-radius: 12px; 
-          max-width: 400px; 
-          z-index: 10001;
-          font-family: system-ui;
-          box-shadow: 0 10px 30px rgba(0,0,0,0.4);
-          backdrop-filter: blur(16px);
-        ">
-          <div style="font-weight: bold; margin-bottom: 8px;">❌ UNIVERSAL XLSX Import Error</div>
-          <div style="font-size: 14px;">
-            Failed to process UNIVERSAL XLSX file. Please check the format matches expected structure with valid language codes.
-          </div>
-        </div>
-      `;
-      
-      document.body.appendChild(notification);
-      setTimeout(() => {
-        if (notification.parentNode) {
-          notification.parentNode.removeChild(notification);
-        }
-      }, 5000);
+      console.error('❌ Error processing XLSX import:', error);
+      showError(
+        'XLSX Import Failed',
+        'Could not process the XLSX file',
+        error instanceof Error ? error.message : 'Unknown error occurred'
+      );
     }
   };
 
-  // Clear imported translations
-  const clearImportedTranslations = () => {
-    setImportedTranslations(null);
-    setImportedFileName('');
-    setImportedLanguages([]);
-    setDetectedSourceLanguage(null);
-    console.log('🗑️ Cleared imported universal translations data');
-  };
-
-  // Handle file selection with enhanced auto language detection
+  // Enhanced file selection
   const handleFileSelect = async (file: File) => {
     setSelectedFile(file);
     console.log(`📁 File selected: ${file.name} (${Math.round(file.size/(1024*1024))}MB)`);
     
-    // Auto-detect source language with enhanced validation
     if (!detectedSourceLanguage) {
       try {
         const detected = await detectSourceLanguage(file);
@@ -685,82 +496,43 @@ export default function App() {
         const detectedLangInfo = getLanguageInfo(detected);
         const detectedLangName = detectedLangInfo?.name || detected;
         
-        console.log(`🎯 Auto-detected source language: ${detectedLangName} (${detected})`);
-        
-        // Show notification
-        const notification = document.createElement('div');
-        notification.innerHTML = `
-          <div style="
-            position: fixed; 
-            top: 20px; 
-            right: 20px; 
-            background: rgba(59, 130, 246, 0.95); 
-            color: white; 
-            padding: 12px 16px; 
-            border-radius: 8px; 
-            z-index: 9999;
-            font-family: system-ui;
-            font-size: 14px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-          ">
-            🔍 Source Language Detected: <strong>${detectedLangName}</strong>
-          </div>
-        `;
-        
-        document.body.appendChild(notification);
-        setTimeout(() => {
-          if (notification.parentNode) {
-            notification.parentNode.removeChild(notification);
-          }
-        }, 3000);
-        
+        showInfo(
+          '🔍 Language Detected',
+          `Source: ${detectedLangName}`,
+          'Auto-detected from file content'
+        );
       } catch (error) {
         console.warn('⚠️ Auto language detection failed:', error);
       }
     }
   };
 
-  // Handle selectedLanguages change with enhanced validation
+  // Enhanced language selection
   const handleLanguageSelectionChange = (newSelection: string[]) => {
-    console.log('🔄 UNIVERSAL language selection changed:', { from: selectedLanguages, to: newSelection });
-    
-    // Enhanced validation before setting
+    console.log('🔄 Language selection changed:', { from: selectedLanguages, to: newSelection });
     const validatedSelection = validateLanguageSelection(newSelection);
-    console.log('🔍 Validated language selection:', validatedSelection);
-    
     setSelectedLanguages(validatedSelection);
   };
 
-  // Rest of the functions remain the same but with enhanced error handling
+  // Enhanced translation setup
   const createTranslationSetup = () => {
     if (!selectedFile) {
-      alert('Please select a PPTX file first.');
+      showError('No File Selected', 'Please select a PPTX file first');
       return;
     }
 
     if (selectedLanguages.length === 0) {
-      alert(t('selectAtLeastOneLanguage') || 'Please select at least one target language.');
+      showError('No Languages Selected', 'Please select at least one target language');
       return;
     }
 
-    // Enhanced validation
     const validatedLanguages = validateLanguageSelection(selectedLanguages);
-    if (validatedLanguages.length !== selectedLanguages.length) {
-      console.warn('🔧 Some languages were invalid and removed from selection');
-      setSelectedLanguages(validatedLanguages);
-    }
-
     if (validatedLanguages.length === 0) {
-      alert('No valid languages selected. Please choose from the supported language list.');
+      showError('Invalid Languages', 'No valid languages selected');
       return;
     }
 
     const usingImported = !!importedTranslations;
-    
-    console.log(`🎯 Creating UNIVERSAL translation setup for: ${selectedFile.name}`);
-    console.log(`🌍 Validated target languages: ${validatedLanguages.join(', ')}`);
-    console.log(`🔍 Detected source: ${detectedSourceLanguage}`);
-    console.log(`📊 Using imported translations: ${usingImported}`);
     
     const newJob: TranslationJob = {
       id: Date.now().toString(),
@@ -782,77 +554,48 @@ export default function App() {
     const sourceLangName = detectedSourceLanguage ? 
       getLanguageInfo(detectedSourceLanguage)?.name : 'Auto-detect';
     
-    const notification = document.createElement('div');
-    notification.innerHTML = `
-      <div style="
-        position: fixed; 
-        top: 20px; 
-        right: 20px; 
-        background: rgba(59, 130, 246, 0.95); 
-        color: white; 
-        padding: 16px; 
-        border-radius: 8px; 
-        max-width: 450px; 
-        z-index: 9999;
-        font-family: system-ui, -apple-system, sans-serif;
-        box-shadow: 0 10px 25px rgba(0,0,0,0.3);
-        backdrop-filter: blur(10px);
-      ">
-        <div style="font-weight: bold; margin-bottom: 8px;">🌍 Universal Translation Project Ready!</div>
-        <div style="font-size: 14px; opacity: 0.9; margin-bottom: 8px;">
-          ✅ Source: ${sourceLangName}<br>
-          ✅ Validated Target Languages: ${validatedLanguages.length}<br>
-          ${usingImported ? '📊 Using XLSX imported translations' : '🌐 Ready for Google Translate processing'}
-        </div>
-        <div style="font-size: 12px; margin-top: 8px; opacity: 0.8;">
-          Any-to-Any Translation Ready! 🎯<br>
-          Language validation: ✅ All codes verified
-        </div>
-      </div>
-    `;
-    
-    document.body.appendChild(notification);
-    setTimeout(() => {
-      if (notification.parentNode) {
-        notification.parentNode.removeChild(notification);
-      }
-    }, 6000);
+    showSuccess(
+      '🎯 Translation Project Ready!',
+      `${validatedLanguages.length} languages prepared`,
+      `Source: ${sourceLangName} | File: ${selectedFile.name}`
+    );
   };
 
-  // Continue with all other functions - they remain largely the same
+  // Enhanced translation start
   const startTranslationForLanguage = async (job: TranslationJob, language: string) => {
     if (isProcessing) {
-      alert('Please wait for the current translation to complete.');
+      showWarning('Translation Busy', 'Please wait for current translation to complete');
       return;
     }
 
-    // Validate language before processing
     const validatedLang = getLanguageInfo(language);
     if (!validatedLang) {
-      alert(`Invalid language code: ${language}. Please select a valid language.`);
+      showError('Invalid Language', `Invalid language code: ${language}`);
       return;
     }
 
     setIsProcessing(true);
     
     try {
-      console.log(`🚀 Starting UNIVERSAL translation for ${validatedLang.name} (${validatedLang.code}) in job ${job.id}`);
-      console.log(`🔍 Source language: ${job.detectedSourceLanguage || 'auto-detect'}`);
-      console.log(`📊 Using imported translations:`, !!job.importedTranslations);
+      console.log(`🚀 Starting ENHANCED translation for ${validatedLang.name} (${validatedLang.code})`);
       
       updateJob(job.id, {
         status: 'pending',
         progress: 0,
-        currentStep: `Starting ${validatedLang.name} translation from ${job.detectedSourceLanguage?.toUpperCase() || 'AUTO'} with ${job.usingImportedTranslations ? 'imported XLSX data' : 'Universal Google Translate'}...`
+        currentStep: `Starting ${validatedLang.name} translation with FIXED service...`
       });
 
       await startUniversalTranslation(job.id, job.sourceFile, [validatedLang.code], job.importedTranslations, job.detectedSourceLanguage);
     } catch (error) {
-      console.error('❌ Universal translation failed:', error);
+      console.error('❌ Translation failed:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Translation failed';
+      
       updateJob(job.id, {
         status: 'error',
-        error: error instanceof Error ? error.message : 'Universal translation failed'
+        error: errorMessage
       });
+      
+      showTranslationError(validatedLang.name, errorMessage);
     } finally {
       setIsProcessing(false);
     }
@@ -860,42 +603,38 @@ export default function App() {
 
   const startTranslationForAllLanguages = async (job: TranslationJob) => {
     if (isProcessing) {
-      alert('Please wait for the current translation to complete.');
+      showWarning('Translation Busy', 'Please wait for current translation to complete');
       return;
     }
 
-    // Validate all languages before processing
     const validatedLanguages = validateLanguageSelection(job.selectedLanguages);
     if (validatedLanguages.length === 0) {
-      alert('No valid languages in selection. Please check your language choices.');
+      showError('No Valid Languages', 'No valid languages in selection');
       return;
-    }
-
-    if (validatedLanguages.length !== job.selectedLanguages.length) {
-      console.warn('🔧 Some languages were invalid and will be skipped');
     }
 
     setIsProcessing(true);
     
     try {
-      console.log(`🚀 Starting UNIVERSAL translation for all validated languages in job ${job.id}`);
-      console.log(`🔍 Source language: ${job.detectedSourceLanguage || 'auto-detect'}`);
-      console.log(`📊 Using imported translations:`, !!job.importedTranslations);
-      console.log(`🌍 Validated languages: ${validatedLanguages.join(', ')}`);
+      console.log(`🚀 Starting ENHANCED translation for ${validatedLanguages.length} languages`);
       
       updateJob(job.id, {
         status: 'pending',
         progress: 0,
-        currentStep: `Starting UNIVERSAL translation for ${validatedLanguages.length} validated languages from ${job.detectedSourceLanguage?.toUpperCase() || 'AUTO'} with ${job.usingImportedTranslations ? 'imported XLSX data' : 'Universal Google Translate'}...`
+        currentStep: `Starting translation for ${validatedLanguages.length} languages with FIXED service...`
       });
 
       await startUniversalTranslation(job.id, job.sourceFile, validatedLanguages, job.importedTranslations, job.detectedSourceLanguage);
     } catch (error) {
-      console.error('❌ Universal translation failed:', error);
+      console.error('❌ Translation failed:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Translation failed';
+      
       updateJob(job.id, {
         status: 'error',
-        error: error instanceof Error ? error.message : 'Universal translation failed'
+        error: errorMessage
       });
+      
+      showError('Translation Failed', errorMessage, 'Check console for detailed error information');
     } finally {
       setIsProcessing(false);
     }
@@ -908,15 +647,10 @@ export default function App() {
   };
 
   const startUniversalTranslation = async (jobId: string, file: File, targetLanguages: string[], importedTranslations?: any, sourceLanguage?: string) => {
-    // Enhanced validation for target languages
     const validatedTargetLanguages = validateLanguageSelection(targetLanguages);
     
     if (validatedTargetLanguages.length === 0) {
       throw new Error('No valid target languages provided');
-    }
-
-    if (validatedTargetLanguages.length !== targetLanguages.length) {
-      console.warn(`🔧 Removed ${targetLanguages.length - validatedTargetLanguages.length} invalid language(s) from translation job: ${jobId}`);
     }
 
     translationService.onProgress(jobId, (progress) => {
@@ -929,16 +663,13 @@ export default function App() {
     });
 
     try {
-      console.log(`🚀 Starting UNIVERSAL translation service for job: ${jobId}`);
-      console.log(`📊 Using v${APP_VERSION} UNIVERSAL translation engine with enhanced validation`);
-      console.log(`🔍 Source language: ${sourceLanguage || 'auto-detect'}`);
-      console.log(`🌍 Validated target languages: ${validatedTargetLanguages.join(', ')}`);
-      console.log(`📋 Imported translations:`, importedTranslations ? 'YES' : 'NO');
+      console.log(`🚀 Starting ENHANCED translation service for job: ${jobId}`);
+      console.log(`📊 Using FIXED v${APP_VERSION} translation engine`);
       
       const results = await translationService.startUniversalTranslation(
         jobId,
         file,
-        validatedTargetLanguages, // Use validated languages
+        validatedTargetLanguages,
         sourceLanguage,
         importedTranslations
       );
@@ -950,21 +681,21 @@ export default function App() {
       });
 
       const totalSize = results.reduce((sum, r) => sum + (r.size || 0), 0);
-      console.log(`✅ UNIVERSAL translation completed for job ${jobId}: ${results.length} files, ${Math.round(totalSize/(1024*1024))}MB total`);
+      console.log(`✅ ENHANCED translation completed: ${results.length} files, ${Math.round(totalSize/(1024*1024))}MB`);
+      
+      showSuccess(
+        '🎉 Translation Complete!',
+        `Generated ${results.length} translated files`,
+        `Total size: ${Math.round(totalSize/(1024*1024))}MB`
+      );
 
     } catch (error) {
-      console.error(`❌ UNIVERSAL translation failed for job ${jobId}:`, error);
-      
-      updateJob(jobId, {
-        status: 'error',
-        error: error instanceof Error ? error.message : 'Unknown error occurred'
-      });
-      
+      console.error(`❌ ENHANCED translation failed for job ${jobId}:`, error);
       throw error;
     }
   };
 
-  // Rest of the functions remain the same...
+  // Download handlers (unchanged but with notifications)
   const handleDownload = async (job: TranslationJob, language: string) => {
     if (!job.results) return;
     
@@ -973,8 +704,14 @@ export default function App() {
 
     try {
       await translationService.downloadFile(result.fileId, result.fileName);
+      const lang = getLanguageInfo(language);
+      showSuccess(
+        'Download Started',
+        `${lang?.name || language} file download initiated`,
+        result.fileName
+      );
     } catch (error) {
-      alert(`Failed to download ${result.fileName}: ${error}`);
+      showError('Download Failed', `Failed to download ${result.fileName}`, error instanceof Error ? error.message : 'Unknown error');
     }
   };
 
@@ -983,105 +720,100 @@ export default function App() {
 
     try {
       await translationService.downloadAllFiles(job.results, job.fileName);
+      showSuccess(
+        'Bulk Download Started',
+        `Downloading ${job.results.length} files`,
+        'Files will download individually'
+      );
     } catch (error) {
-      alert(`Failed to download files: ${error}`);
+      showError('Bulk Download Failed', 'Failed to download files', error instanceof Error ? error.message : 'Unknown error');
     }
   };
 
   const handleDownloadXLSX = async (job: TranslationJob) => {
     try {
-      console.log(`📊 Downloading UNIVERSAL XLSX for job ${job.id} with v${APP_VERSION} ALL 65+ languages structure`);
-      
       if (job.sheetId) {
-        await translationService.downloadSheet(job.sheetId, `${job.fileName}_universal_translations.xlsx`);
+        await translationService.downloadSheet(job.sheetId, `${job.fileName}_translations.xlsx`);
       } else {
-        await translationService.generateUniversalXLSX(job, `${job.fileName}_universal_translations.xlsx`);
+        await translationService.generateUniversalXLSX(job, `${job.fileName}_translations.xlsx`);
       }
+      showSuccess('XLSX Download', 'Translation spreadsheet download started');
     } catch (error) {
-      console.error('❌ UNIVERSAL XLSX download failed:', error);
-      alert(`Failed to download UNIVERSAL XLSX: ${error}`);
+      showError('XLSX Download Failed', 'Could not download spreadsheet', error instanceof Error ? error.message : 'Unknown error');
     }
   };
 
+  const clearImportedTranslations = () => {
+    setImportedTranslations(null);
+    setImportedFileName('');
+    setImportedLanguages([]);
+    setDetectedSourceLanguage(null);
+    showInfo('Data Cleared', 'Imported translation data cleared');
+  };
+
   const forceRefresh = () => {
-    console.log('🔄 Force refresh requested by user - clearing CSS and language caches');
-    
     if ('caches' in window) {
       caches.keys().then((names) => {
-        names.forEach(name => {
-          caches.delete(name);
-        });
-        console.log('✅ Browser caches cleared for CSS refresh');
+        names.forEach(name => caches.delete(name));
       });
     }
-    
     localStorage.clear();
-    console.log('✅ LocalStorage cleared');
-    
     sessionStorage.clear();
-    console.log('✅ SessionStorage cleared');
-    
     window.location.reload();
   };
 
   return (
     <div className="min-h-screen bg-black text-white relative overflow-x-hidden">
-      {/* Enhanced Version indicator and status */}
+      {/* Notification System */}
+      <NotificationSystem
+        notifications={notifications}
+        onRemove={removeNotification}
+      />
+
+      {/* Version indicators */}
       <div className="fixed bottom-4 left-4 z-50 space-y-2">
         <Badge className="bg-gray-800/80 text-gray-300 border-gray-600/50 text-xs backdrop-blur-sm">
           v{APP_VERSION}
         </Badge>
         <Badge className="bg-green-800/80 text-green-300 border-green-600/50 text-xs backdrop-blur-sm">
-          CSS Fixed ✅
+          FIXED ✅
         </Badge>
         <Badge className="bg-purple-800/80 text-purple-300 border-purple-600/50 text-xs backdrop-blur-sm">
-          Universal: {ALL_GOOGLE_TRANSLATE_LANGUAGES.length} Langs
+          Languages: {ALL_GOOGLE_TRANSLATE_LANGUAGES.length}
         </Badge>
         <Badge className={`text-xs backdrop-blur-sm ${
           cacheStatus === 'cleared' ? 'bg-green-800/80 text-green-300 border-green-600/50' :
-          cacheStatus === 'partial' ? 'bg-yellow-800/80 text-yellow-300 border-yellow-600/50' :
-          cacheStatus === 'unsupported' ? 'bg-blue-800/80 text-blue-300 border-blue-600/50' :
-          cacheStatus === 'unavailable' ? 'bg-red-800/80 text-red-300 border-red-600/50' :
           'bg-gray-800/80 text-gray-300 border-gray-600/50'
         }`}>
           Cache: {cacheStatus}
         </Badge>
         
-        {/* Enhanced Source Language Detection Status */}
         {detectedSourceLanguage && (
           <Badge className="bg-blue-800/80 text-blue-300 border-blue-600/50 text-xs backdrop-blur-sm">
-            Source: {getLanguageInfo(detectedSourceLanguage)?.name || detectedSourceLanguage}
+            Source: {getLanguageInfo(detectedSourceLanguage)?.name}
           </Badge>
         )}
         
-        {/* Enhanced selected languages count */}
         {selectedLanguages.length > 0 && (
           <Badge className="bg-purple-800/80 text-purple-300 border-purple-600/50 text-xs backdrop-blur-sm">
-            Selected: {selectedLanguages.length} ✓
-          </Badge>
-        )}
-        
-        {/* XLSX Import Status */}
-        {importedTranslations && (
-          <Badge className="bg-green-800/80 text-green-300 border-green-600/50 text-xs backdrop-blur-sm">
-            📊 Universal XLSX ✓
+            Selected: {selectedLanguages.length}
           </Badge>
         )}
       </div>
 
-      {/* Enhanced Force refresh button with CSS fix info */}
+      {/* Force refresh button */}
       <div className="fixed bottom-4 right-4 z-50">
         <Button
           onClick={forceRefresh}
           size="sm"
           className="bg-gray-800/80 border-gray-600/50 text-gray-300 hover:bg-gray-700/80 backdrop-blur-sm"
-          title="Clear cache and refresh (CSS fix applied)"
+          title="Clear cache and refresh"
         >
           <RefreshCw className="w-3 h-3" />
         </Button>
       </div>
 
-      {/* Animated Background - Enhanced for CSS fix testing */}
+      {/* Animated Background */}
       <div className="fixed inset-0 z-0">
         {animationsEnabled ? (
           <>
@@ -1093,7 +825,7 @@ export default function App() {
                   willChange: 'transform',
                   transition: 'transform 1000ms cubic-bezier(0.4, 0, 0.2, 1)'
                 }}
-              ></div>
+              />
               <div 
                 className="absolute w-[500px] h-[500px] bg-gradient-to-bl from-purple-500/8 via-pink-500/6 to-blue-500/4 rounded-full blur-2xl gpu-accelerated"
                 style={{
@@ -1101,80 +833,21 @@ export default function App() {
                   willChange: 'transform',
                   transition: 'transform 1200ms cubic-bezier(0.4, 0, 0.2, 1)'
                 }}
-              ></div>
-              <div 
-                className="absolute w-[700px] h-[700px] bg-gradient-to-tr from-cyan-500/6 via-blue-500/8 to-purple-500/4 rounded-full blur-3xl gpu-accelerated"
-                style={{
-                  transform: `translate(${mousePosition.x * 1.5 - 150}px, ${-mousePosition.y * 2 + 300}px) rotate(${mousePosition.x * 0.5}deg)`,
-                  willChange: 'transform',
-                  transition: 'transform 800ms cubic-bezier(0.4, 0, 0.2, 1)'
-                }}
-              ></div>
-            </div>
-
-            <div className="absolute inset-0">
-              <div 
-                className="absolute w-80 h-80 bg-gradient-to-r from-blue-400/4 to-purple-400/6 rounded-full blur-2xl gpu-accelerated"
-                style={{
-                  left: `${20 + mousePosition.x * 0.3}%`,
-                  top: `${30 + mousePosition.y * 0.2}%`,
-                  transform: `scale(${1 + Math.sin(mousePosition.x * 0.05) * 0.1})`,
-                  transition: 'all 500ms cubic-bezier(0.4, 0, 0.2, 1)'
-                }}
-              ></div>
-              <div 
-                className="absolute w-60 h-60 bg-gradient-to-l from-purple-400/6 to-cyan-400/4 rounded-full blur-xl gpu-accelerated"
-                style={{
-                  right: `${15 + mousePosition.y * 0.2}%`,
-                  bottom: `${25 + mousePosition.x * 0.15}%`,
-                  transform: `scale(${1 + Math.cos(mousePosition.y * 0.03) * 0.08})`,
-                  transition: 'all 700ms cubic-bezier(0.4, 0, 0.2, 1)'
-                }}
-              ></div>
-            </div>
-
-            <div className="absolute inset-0 opacity-[0.015]">
-              <div 
-                className="absolute inset-0 gpu-accelerated"
-                style={{
-                  backgroundImage: `
-                    linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px),
-                    linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px)
-                  `,
-                  backgroundSize: '60px 60px',
-                  transform: `translate(${mousePosition.x * 0.1}px, ${mousePosition.y * 0.1}px)`,
-                  transition: 'transform 2000ms cubic-bezier(0.4, 0, 0.2, 1)'
-                }}
-              ></div>
+              />
             </div>
           </>
         ) : (
           <div className="absolute inset-0">
-            <div className="absolute w-[600px] h-[600px] bg-gradient-to-br from-blue-500/4 via-cyan-500/6 to-purple-500/4 rounded-full blur-3xl left-1/4 top-1/4"></div>
-            <div className="absolute w-[500px] h-[500px] bg-gradient-to-bl from-purple-500/6 via-pink-500/4 to-blue-500/3 rounded-full blur-2xl right-1/4 top-1/2"></div>
-            <div className="absolute w-[700px] h-[700px] bg-gradient-to-tr from-cyan-500/4 via-blue-500/6 to-purple-500/3 rounded-full blur-3xl left-1/2 bottom-1/4"></div>
-            
-            <div className="absolute inset-0 opacity-[0.01]">
-              <div 
-                className="absolute inset-0"
-                style={{
-                  backgroundImage: `
-                    linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px),
-                    linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px)
-                  `,
-                  backgroundSize: '60px 60px'
-                }}
-              ></div>
-            </div>
+            <div className="absolute w-[600px] h-[600px] bg-gradient-to-br from-blue-500/4 via-cyan-500/6 to-purple-500/4 rounded-full blur-3xl left-1/4 top-1/4" />
+            <div className="absolute w-[500px] h-[500px] bg-gradient-to-bl from-purple-500/6 via-pink-500/4 to-blue-500/3 rounded-full blur-2xl right-1/4 top-1/2" />
           </div>
         )}
       </div>
 
       <div className="relative z-10 container mx-auto px-6 py-8">
-        {/* Enhanced Header with CSS fix indicator */}
+        {/* Header */}
         <div className="text-center mb-12">
           <div className="flex justify-between items-center mb-3">
-            {/* Enhanced API Status with CSS fix info */}
             <div className="flex items-center gap-2">
               {apiStatus && (
                 <>
@@ -1186,29 +859,23 @@ export default function App() {
                     <Settings className="w-3 h-3 mr-1" />
                     {apiStatus.hasEnvironmentKey && apiStatus.environmentKeyValid 
                       ? 'Real APIs' 
-                      : 'Enhanced Mode'
+                      : 'Demo Mode'
                     }
                   </Badge>
                   
                   <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-xs">
                     <Cpu className="w-3 h-3 mr-1" />
-                    UNIVERSAL
+                    ENHANCED
                   </Badge>
                   
-                  <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30 text-xs">
-                    <Scan className="w-3 h-3 mr-1" />
-                    Auto-Detect
-                  </Badge>
-
                   <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-xs">
                     <CheckCircle className="w-3 h-3 mr-1" />
-                    CSS Fixed
+                    FIXED
                   </Badge>
                 </>
               )}
             </div>
 
-            {/* Language Selector */}
             <Select value={currentLanguage} onValueChange={changeLanguage}>
               <SelectTrigger className="w-36 bg-white/5 backdrop-blur-sm border-white/10 text-white">
                 <SelectValue className="text-white" />
@@ -1242,14 +909,13 @@ export default function App() {
             </div>
           </div>
           <p className="text-gray-400 text-base max-w-xl mx-auto mb-3">
-            Universal PowerPoint translation with auto language detection and all {ALL_GOOGLE_TRANSLATE_LANGUAGES.length} Google Translate languages
+            Universal PowerPoint translation with enhanced error handling and all {ALL_GOOGLE_TRANSLATE_LANGUAGES.length} Google Translate languages
           </p>
           
-          {/* Enhanced Badges with CSS fix indicator */}
           <div className="flex justify-center gap-2">
             <Badge className="bg-green-500/20 text-green-400 border-green-500/30 px-3 py-1 text-sm">
               <CheckCircle className="w-3 h-3 mr-1" />
-              CSS Loading Fixed
+              CSS + Service Fixed
             </Badge>
             <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30 px-3 py-1 text-sm">
               <Globe className="w-3 h-3 mr-1" />
@@ -1257,16 +923,15 @@ export default function App() {
             </Badge>
             <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 px-3 py-1 text-sm">
               <Scan className="w-3 h-3 mr-1" />
-              Language Validation
+              Enhanced Detection
             </Badge>
           </div>
         </div>
 
-        {/* Main Content - rest remains the same as before but with enhanced language validation throughout */}
+        {/* Main Content */}
         <div className="max-w-5xl mx-auto space-y-6">
           {/* Upload & Language Selection */}
           <div className="grid lg:grid-cols-2 gap-6">
-            {/* Enhanced File Upload with Language Detection */}
             <Card className="p-6 bg-black/40 backdrop-blur-sm border-white/10 border shadow-2xl">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-serif text-white">Select PPTX File</h2>
@@ -1289,7 +954,6 @@ export default function App() {
                 disabled={isProcessing}
               />
               
-              {/* Enhanced Source Language Detection Info */}
               {detectedSourceLanguage && (
                 <div className="mt-4 p-3 bg-blue-500/10 rounded border border-blue-500/20">
                   <div className="flex items-center gap-2 mb-1">
@@ -1304,20 +968,19 @@ export default function App() {
               )}
             </Card>
 
-            {/* ENHANCED: Universal Language Selection with validation */}
             <Card className="p-6 bg-black/40 backdrop-blur-sm border-white/10 border shadow-2xl">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-serif text-white">Target Languages</h2>
                 <div className="flex gap-2">
                   <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30 px-2 py-1 text-xs">
-                    Universal: {ALL_GOOGLE_TRANSLATE_LANGUAGES.length}
+                    All: {ALL_GOOGLE_TRANSLATE_LANGUAGES.length}
                   </Badge>
                   <Badge className="bg-green-500/20 text-green-300 border-green-500/30 px-2 py-1 text-xs">
-                    Validated
+                    Enhanced
                   </Badge>
                   {selectedLanguages.length > 0 && (
                     <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30 px-2 py-1 text-xs">
-                      Selected: {selectedLanguages.length} ✓
+                      Selected: {selectedLanguages.length}
                     </Badge>
                   )}
                 </div>
@@ -1334,11 +997,11 @@ export default function App() {
             </Card>
           </div>
 
-          {/* Setup Button - Enhanced */}
+          {/* Setup Button */}
           {selectedFile && selectedLanguages.length > 0 && (
             <Card className="p-6 bg-black/40 backdrop-blur-sm border-green-500/20 border shadow-2xl">
               <div className="text-center">
-                <h3 className="text-lg font-serif text-white mb-3">Ready for Universal Translation</h3>
+                <h3 className="text-lg font-serif text-white mb-3">Ready for Enhanced Translation</h3>
                 <div className="flex items-center justify-center gap-4 mb-4">
                   <div className="flex items-center gap-2">
                     <FileText className="w-4 h-4 text-blue-400" />
@@ -1354,12 +1017,12 @@ export default function App() {
                   )}
                   <div className="flex items-center gap-2">
                     <Languages className="w-4 h-4 text-purple-400" />
-                    <span className="text-sm text-gray-300">{selectedLanguages.length} validated target languages</span>
+                    <span className="text-sm text-gray-300">{selectedLanguages.length} target languages</span>
                   </div>
                   {importedTranslations && (
                     <div className="flex items-center gap-2">
                       <FileSpreadsheet className="w-4 h-4 text-green-400" />
-                      <span className="text-sm text-green-300">Universal XLSX</span>
+                      <span className="text-sm text-green-300">XLSX Ready</span>
                     </div>
                   )}
                 </div>
@@ -1369,22 +1032,19 @@ export default function App() {
                   className="bg-green-500/20 border-green-500/30 text-green-400 hover:bg-green-500/30 border"
                 >
                   <PlayCircle className="w-4 h-4 mr-2" />
-                  Setup Universal Translation
+                  Setup Enhanced Translation
                 </Button>
               </div>
             </Card>
           )}
 
-          {/* The rest of the components remain the same but with enhanced language validation... */}
-          {/* For brevity, I'm keeping the existing structure but all language operations now use getLanguageInfo() for validation */}
-
-          {/* Universal XLSX Import Status - Enhanced */}
+          {/* XLSX Import Status */}
           {importedTranslations && (
             <Card className="p-6 bg-black/40 backdrop-blur-sm border-green-500/20 border shadow-2xl">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <FileSpreadsheet className="w-5 h-5 text-green-400" />
-                  <h3 className="text-green-400 text-lg font-medium">Universal XLSX Ready</h3>
+                  <h3 className="text-green-400 text-lg font-medium">XLSX Translation Data Ready</h3>
                 </div>
                 <Button
                   onClick={clearImportedTranslations}
@@ -1393,7 +1053,7 @@ export default function App() {
                   className="bg-gray-500/10 border-gray-500/30 text-gray-400 hover:bg-gray-500/20"
                 >
                   <Trash2 className="w-3 h-3 mr-1" />
-                  Clear Import
+                  Clear
                 </Button>
               </div>
               
@@ -1409,7 +1069,7 @@ export default function App() {
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-400">Languages:</span>
-                    <span className="text-white">{importedLanguages.length} validated</span>
+                    <span className="text-white">{importedLanguages.length} detected</span>
                   </div>
                   {detectedSourceLanguage && (
                     <div className="flex items-center justify-between text-sm">
@@ -1422,71 +1082,57 @@ export default function App() {
                 </div>
                 
                 <div className="space-y-2">
-                  <div className="text-sm text-gray-400 mb-2">Validated Languages:</div>
+                  <div className="text-sm text-gray-400 mb-2">Detected Languages:</div>
                   <div className="max-h-32 overflow-y-auto">
                     <div className="flex flex-wrap gap-1">
-                      {importedLanguages.slice(0, 20).map(langCode => {
+                      {importedLanguages.slice(0, 15).map(langCode => {
                         const lang = getLanguageInfo(langCode);
-                        const isCurrentlySelected = selectedLanguages.includes(langCode);
+                        const isSelected = selectedLanguages.includes(langCode);
                         
                         return lang ? (
                           <Badge 
                             key={langCode} 
                             className={`text-xs ${
-                              isCurrentlySelected 
+                              isSelected 
                                 ? 'bg-green-500/30 text-green-200 border-green-400/50' 
                                 : 'bg-green-500/10 text-green-400 border-green-500/30'
                             }`}
                           >
                             <span className="mr-1">{lang.flag}</span>
                             {lang.name}
-                            {isCurrentlySelected && <CheckCircle className="w-3 h-3 ml-1" />}
+                            {isSelected && <CheckCircle className="w-3 h-3 ml-1" />}
                           </Badge>
                         ) : null;
                       })}
-                      {importedLanguages.length > 20 && (
+                      {importedLanguages.length > 15 && (
                         <Badge className="bg-gray-500/20 text-gray-300 border-gray-500/30 text-xs">
-                          +{importedLanguages.length - 20} more
+                          +{importedLanguages.length - 15} more
                         </Badge>
                       )}
                     </div>
                   </div>
                 </div>
               </div>
-              
-              <div className="p-3 bg-green-500/10 rounded border border-green-500/20">
-                <div className="flex items-center gap-2 mb-2">
-                  <CheckCircle className="w-4 h-4 text-green-400" />
-                  <p className="text-green-300 text-sm font-medium">
-                    Universal XLSX structure ready - All languages validated
-                  </p>
-                </div>
-                <p className="text-green-200 text-xs">
-                  ✅ Languages validated: {importedLanguages.length}<br />
-                  ✅ Translation data ready for {Object.keys(importedTranslations).length} slides<br />
-                  🌍 Universal Translation: {detectedSourceLanguage ? getLanguageInfo(detectedSourceLanguage)?.name : 'Any'} → Any Validated Language
-                </p>
-              </div>
             </Card>
           )}
 
-          {/* Enhanced Processing Warning */}
+          {/* Processing Warning */}
           {isProcessing && (
             <Card className="p-3 bg-black/40 backdrop-blur-sm border-yellow-500/20 border">
               <div className="flex items-center space-x-2">
                 <AlertCircle className="w-4 h-4 text-yellow-400" />
                 <p className="text-yellow-400 text-sm">
-                  Universal translation in progress with v{APP_VERSION} engine. Processing {detectedSourceLanguage ? `from ${getLanguageInfo(detectedSourceLanguage)?.name}` : 'with auto-detection'} using {importedTranslations ? 'imported XLSX translations' : 'complete Google Translate verification'} with enhanced language validation...
+                  Enhanced translation in progress with FIXED v{APP_VERSION} engine...
                 </p>
               </div>
             </Card>
           )}
 
-          {/* Translation Jobs - Enhanced with validation info throughout */}
+          {/* Translation Jobs */}
           {jobs.length > 0 && (
             <Card className="p-6 bg-black/40 backdrop-blur-sm border-white/10 border shadow-2xl">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-serif text-white">Universal Translation Projects</h2>
+                <h2 className="text-xl font-serif text-white">Enhanced Translation Projects</h2>
                 <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30 px-2 py-1 text-xs">
                   <Zap className="w-3 h-3 mr-1" />
                   {jobs.length} Projects
@@ -1495,7 +1141,6 @@ export default function App() {
               <div className="space-y-6">
                 {jobs.map(job => (
                   <div key={job.id} className="relative border border-white/10 rounded-lg p-4">
-                    {/* Job Header - Enhanced */}
                     <div className="flex items-center justify-between mb-4">
                       <div>
                         <h3 className="text-lg font-medium text-white">{job.fileName}</h3>
@@ -1504,17 +1149,12 @@ export default function App() {
                             job.status === 'ready' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
                             job.status === 'completed' ? 'bg-green-500/20 text-green-300 border-green-500/30' :
                             job.status === 'error' ? 'bg-red-500/20 text-red-300 border-red-500/30' :
-                            job.status === 'verifying' ? 'bg-orange-500/20 text-orange-300 border-orange-500/30' :
                             'bg-yellow-500/20 text-yellow-300 border-yellow-500/30'
                           }`}>
-                            {job.status === 'ready' ? 'Ready' : 
-                             job.status === 'completed' ? 'Completed' :
-                             job.status === 'error' ? 'Error' :
-                             job.status === 'verifying' ? 'Verifying' : 'Processing'
-                            }
+                            {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
                           </Badge>
                           <span className="text-sm text-gray-400">
-                            {job.selectedLanguages.length} validated languages
+                            {job.selectedLanguages.length} languages
                           </span>
                           {job.detectedSourceLanguage && (
                             <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30 text-xs">
@@ -1526,47 +1166,22 @@ export default function App() {
                           {job.usingImportedTranslations && (
                             <Badge className="bg-green-500/20 text-green-300 border-green-500/30 text-xs">
                               <FileSpreadsheet className="w-3 h-3 mr-1" />
-                              Universal XLSX
+                              XLSX
                             </Badge>
                           )}
                         </div>
                       </div>
                     </div>
 
-                    {/* Ready State - Show Generate Buttons with enhanced validation */}
+                    {/* Ready State */}
                     {job.status === 'ready' && (
                       <div className="space-y-4">
-                        {job.usingImportedTranslations && job.availableImportedLanguages && (
-                          <div className="p-3 bg-green-500/10 border border-green-500/20 rounded">
-                            <div className="flex items-center gap-2 mb-2">
-                              <Eye className="w-4 h-4 text-green-400" />
-                              <span className="text-green-400 text-sm font-medium">Available from Universal Import (Validated):</span>
-                            </div>
-                            <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
-                              {job.availableImportedLanguages.slice(0, 15).map(langCode => {
-                                const lang = getLanguageInfo(langCode);
-                                return lang ? (
-                                  <Badge key={langCode} className="bg-green-500/20 text-green-300 border-green-500/30 text-xs">
-                                    <span className="mr-1">{lang.flag}</span>
-                                    {lang.name}
-                                  </Badge>
-                                ) : null;
-                              })}
-                              {job.availableImportedLanguages.length > 15 && (
-                                <Badge className="bg-gray-500/20 text-gray-300 border-gray-500/30 text-xs">
-                                  +{job.availableImportedLanguages.length - 15} more
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                        
                         <div className="space-y-3">
-                          <div className="text-sm text-gray-400 mb-2">Generate Individual Languages (Validated):</div>
+                          <div className="text-sm text-gray-400 mb-2">Generate Individual Languages:</div>
                           <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
                             {job.selectedLanguages.slice(0, 20).map(langCode => {
                               const lang = getLanguageInfo(langCode);
-                              const isAvailableFromImport = job.availableImportedLanguages?.includes(langCode);
+                              const isFromImport = job.availableImportedLanguages?.includes(langCode);
                               
                               return lang ? (
                                 <Button
@@ -1575,24 +1190,16 @@ export default function App() {
                                   disabled={isProcessing}
                                   size="sm"
                                   className={`${
-                                    isAvailableFromImport
+                                    isFromImport
                                       ? 'bg-green-500/20 border-green-500/30 text-green-300 hover:bg-green-500/30'
                                       : 'bg-purple-500/20 border-purple-500/30 text-purple-300 hover:bg-purple-500/30'
                                   } border text-xs`}
                                 >
                                   <span className="mr-1">{lang.flag}</span>
                                   {lang.name}
-                                  {isAvailableFromImport && (
-                                    <FileSpreadsheet className="w-3 h-3 ml-1" />
-                                  )}
                                 </Button>
                               ) : null;
                             })}
-                            {job.selectedLanguages.length > 20 && (
-                              <Badge className="bg-gray-500/20 text-gray-300 border-gray-500/30 text-xs">
-                                +{job.selectedLanguages.length - 20} more validated languages
-                              </Badge>
-                            )}
                           </div>
                         </div>
                         
@@ -1603,7 +1210,7 @@ export default function App() {
                             className="bg-blue-500/20 border-blue-500/30 text-blue-400 hover:bg-blue-500/30 border"
                           >
                             <Zap className="w-4 h-4 mr-2" />
-                            Generate All Validated Languages ({job.selectedLanguages.length})
+                            Generate All Languages ({job.selectedLanguages.length})
                           </Button>
                         </div>
                       </div>
@@ -1618,7 +1225,7 @@ export default function App() {
                       />
                     )}
 
-                    {/* Completed State - Enhanced */}
+                    {/* Completed State */}
                     {job.status === 'completed' && job.results && (
                       <div className="space-y-4">
                         <div className="grid gap-3 max-h-60 overflow-y-auto">
@@ -1667,7 +1274,7 @@ export default function App() {
                             className="bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20"
                           >
                             <FileSpreadsheet className="w-4 h-4 mr-2" />
-                            Download Universal XLSX
+                            Download XLSX
                           </Button>
                         </div>
                       </div>
@@ -1681,23 +1288,13 @@ export default function App() {
                         </p>
                       </div>
                     )}
-
-                    {/* Enhanced imported translation info */}
-                    {job.usingImportedTranslations && (
-                      <div className="mt-3 p-2 bg-green-500/10 rounded border border-green-500/20">
-                        <p className="text-green-300 text-xs flex items-center gap-1">
-                          <CheckCircle className="w-3 h-3" />
-                          Using universal translations with complete language validation v{APP_VERSION}
-                        </p>
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
             </Card>
           )}
 
-          {/* Enhanced API Status Debug with CSS fix info */}
+          {/* API Status */}
           {apiStatus && !apiStatus.hasEnvironmentKey && (
             <Card className="p-4 bg-yellow-500/10 border-yellow-500/20">
               <div className="flex items-center gap-2 mb-2">
@@ -1705,44 +1302,15 @@ export default function App() {
                 <h3 className="text-yellow-400">Google APIs Not Configured</h3>
               </div>
               <p className="text-yellow-300 text-sm mb-3">
-                App is using UNIVERSAL PPTX processing v{APP_VERSION} with CSS loading fixed and all {ALL_GOOGLE_TRANSLATE_LANGUAGES.length} Google Translate languages + auto language detection + enhanced validation. To enable full Google Translate API:
+                App is using ENHANCED PPTX processing v{APP_VERSION} with full translation capabilities. 
+                All features work with mock data for testing. To enable Google Translate API:
               </p>
               <div className="text-xs text-yellow-200 space-y-1">
                 <p>1. Go to <strong>Netlify Dashboard</strong> → Your Site → <strong>Environment Variables</strong></p>
-                <p>2. Add variable: <code className="bg-yellow-500/20 px-1 rounded">VITE_GOOGLE_SERVICE_ACCOUNT_KEY</code></p>
-                <p>3. Value: Your <code className="bg-yellow-500/20 px-1 rounded">sweden-383609-e27db569b1ec.json</code> content (as single line)</p>
-                <p>4. <strong>Deploy site</strong> to activate universal Google Translate</p>
+                <p>2. Add: <code className="bg-yellow-500/20 px-1 rounded">VITE_GOOGLE_SERVICE_ACCOUNT_KEY</code></p>
+                <p>3. Value: Your service account JSON (as single line)</p>
+                <p>4. <strong>Deploy site</strong> to activate Google Translate</p>
               </div>
-              <p className="text-yellow-300 text-sm mt-2">
-                Universal features: 🌍 All {ALL_GOOGLE_TRANSLATE_LANGUAGES.length} languages + 🔍 Auto language detection + ✅ Complete translation verification + 🎨 CSS loading fixed + 🔧 Language validation! 🚀
-              </p>
-              
-              {/* Enhanced Debug Info */}
-              {apiStatus.debugInfo && (
-                <details className="mt-3">
-                  <summary className="text-yellow-400 text-xs cursor-pointer">v{APP_VERSION} Universal Processing + CSS Fix Debug Information</summary>
-                  <div className="mt-2 text-xs text-yellow-200 space-y-1">
-                    <p>Universal Translation Environment:</p>
-                    <ul className="ml-4 space-y-1">
-                      <li>• Version: v{APP_VERSION} ✅</li>
-                      <li>• CSS Loading Fix: ✅ Applied</li>
-                      <li>• Universal Languages: ✅ {ALL_GOOGLE_TRANSLATE_LANGUAGES.length} supported</li>
-                      <li>• Auto Language Detection: ✅ Available</li>
-                      <li>• Language Validation: ✅ Albanian + All languages</li>
-                      <li>• Any-to-Any Translation: ✅ Ready</li>
-                      <li>• Complete GT Verification: ✅ Implemented</li>
-                      <li>• REAL PPTX Processing: ✅ Active</li>
-                      <li>• Cache Busting: ✅ Multiple strategies</li>
-                    </ul>
-                    {apiStatus.availableEnvVars?.length > 0 && (
-                      <p>Available vars: {apiStatus.availableEnvVars.join(', ')}</p>
-                    )}
-                    {apiStatus.debugInfo.cssFixApplied && (
-                      <p>CSS Fix Status: ✅ PostCSS conflict resolved</p>
-                    )}
-                  </div>
-                </details>
-              )}
             </Card>
           )}
         </div>
