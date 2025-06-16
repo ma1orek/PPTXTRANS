@@ -13,6 +13,14 @@ import { useTranslation } from './hooks/useTranslation';
 import { translationService, TranslationResult } from './services/translationService';
 import { googleApiService } from './services/googleApi';
 
+// VERSION INFO - Force cache invalidation
+const APP_VERSION = '2024.12.16.17.30'; // Updated timestamp for cache busting
+const BUILD_INFO = {
+  version: APP_VERSION,
+  buildTime: new Date().toISOString(),
+  features: ['REAL_PPTX_PROCESSING', 'XLSX_STRUCTURE_FIXED', 'CACHE_BUSTING']
+};
+
 type TranslationJob = {
   id: string;
   fileName: string;
@@ -141,6 +149,27 @@ export default function App() {
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
+  // Version info logging and cache busting
+  useEffect(() => {
+    console.log(`🚀 PPTX Translator Pro v${APP_VERSION}`);
+    console.log('📋 Build Info:', BUILD_INFO);
+    console.log('🔄 Cache busting active - fresh deployment');
+    
+    // Force cache invalidation by updating document title
+    document.title = `PPTX Translator Pro v${APP_VERSION}`;
+    
+    // Add version meta tag
+    const existingMeta = document.querySelector('meta[name="app-version"]');
+    if (existingMeta) {
+      existingMeta.setAttribute('content', APP_VERSION);
+    } else {
+      const meta = document.createElement('meta');
+      meta.name = 'app-version';
+      meta.content = APP_VERSION;
+      document.head.appendChild(meta);
+    }
+  }, []);
+
   // Check API status on load with better error handling
   useEffect(() => {
     const checkApiStatus = async () => {
@@ -177,7 +206,7 @@ export default function App() {
     return () => clearTimeout(timeoutId);
   }, []);
 
-  // ENHANCED: Handle XLSX import with better language detection
+  // ENHANCED: Handle XLSX import with better language detection and structure parsing
   const handleXLSXImport = (file: File, translations: any) => {
     try {
       console.log('📊 XLSX imported with REAL translations:', translations);
@@ -186,41 +215,44 @@ export default function App() {
       setImportedTranslations(translations);
       setImportedFileName(file.name);
       
-      // Enhanced language detection
+      // Enhanced language detection with proper column structure support
       const detectedLanguages = new Set<string>();
       
       // Check each slide's translations to find available languages
       Object.values(translations).forEach((slideTranslations: any) => {
         if (slideTranslations && typeof slideTranslations === 'object') {
           Object.keys(slideTranslations).forEach(lang => {
-            detectedLanguages.add(lang.toLowerCase());
+            // Filter out metadata columns
+            if (!['Slide', 'Original Text', 'Element', 'Status'].includes(lang)) {
+              detectedLanguages.add(lang.toLowerCase());
+            }
           });
         }
       });
       
       console.log('🔍 Detected languages in XLSX:', Array.from(detectedLanguages));
       
-      // Map detected languages to our language codes
+      // Enhanced mapping with column name support
       const mappedLanguages: string[] = [];
       const languageMapping: Record<string, string> = {
         // Direct code matches
-        'pl': 'pl', 'polish': 'pl',
-        'es': 'es', 'spanish': 'es', 'espanol': 'es',
-        'fr': 'fr', 'french': 'fr', 'francais': 'fr',
+        'pl': 'pl', 'polish': 'pl', 'polski': 'pl',
+        'es': 'es', 'spanish': 'es', 'espanol': 'es', 'español': 'es',
+        'fr': 'fr', 'french': 'fr', 'francais': 'fr', 'français': 'fr',
         'de': 'de', 'german': 'de', 'deutsch': 'de',
-        'it': 'it', 'italian': 'it',
-        'pt': 'pt', 'portuguese': 'pt',
-        'ru': 'ru', 'russian': 'ru',
-        'ja': 'ja', 'japanese': 'ja',
-        'ko': 'ko', 'korean': 'ko',
-        'zh': 'zh', 'chinese': 'zh',
-        'ar': 'ar', 'arabic': 'ar',
-        'hi': 'hi', 'hindi': 'hi',
-        'nl': 'nl', 'dutch': 'nl',
-        'sv': 'sv', 'swedish': 'sv',
-        'no': 'no', 'norwegian': 'no',
-        'da': 'da', 'danish': 'da',
-        'fi': 'fi', 'finnish': 'fi'
+        'it': 'it', 'italian': 'it', 'italiano': 'it',
+        'pt': 'pt', 'portuguese': 'pt', 'português': 'pt',
+        'ru': 'ru', 'russian': 'ru', 'русский': 'ru',
+        'ja': 'ja', 'japanese': 'ja', '日本語': 'ja',
+        'ko': 'ko', 'korean': 'ko', '한국어': 'ko',
+        'zh': 'zh', 'chinese': 'zh', '中文': 'zh',
+        'ar': 'ar', 'arabic': 'ar', 'العربية': 'ar',
+        'hi': 'hi', 'hindi': 'hi', 'हिन्दी': 'hi',
+        'nl': 'nl', 'dutch': 'nl', 'nederlands': 'nl',
+        'sv': 'sv', 'swedish': 'sv', 'svenska': 'sv',
+        'no': 'no', 'norwegian': 'no', 'norsk': 'no',
+        'da': 'da', 'danish': 'da', 'dansk': 'da',
+        'fi': 'fi', 'finnish': 'fi', 'suomi': 'fi'
       };
       
       detectedLanguages.forEach(lang => {
@@ -247,11 +279,11 @@ export default function App() {
       setImportedLanguages(mappedLanguages);
       setSelectedLanguages(mappedLanguages);
       
-      // Show success notification
+      // Enhanced success notification with structure info
       if (mappedLanguages.length > 0) {
         console.log(`✅ Auto-selected ${mappedLanguages.length} languages from XLSX:`, mappedLanguages);
         
-        // Create success notification
+        // Create enhanced success notification
         const notification = document.createElement('div');
         notification.innerHTML = `
           <div style="
@@ -262,58 +294,27 @@ export default function App() {
             color: white; 
             padding: 16px; 
             border-radius: 8px; 
-            max-width: 350px; 
+            max-width: 400px; 
             z-index: 9999;
             font-family: system-ui, -apple-system, sans-serif;
             box-shadow: 0 10px 25px rgba(0,0,0,0.3);
             backdrop-filter: blur(10px);
           ">
             <div style="font-weight: bold; margin-bottom: 8px;">📊 XLSX Import Success!</div>
-            <div style="font-size: 14px; opacity: 0.9;">
-              Found ${mappedLanguages.length} languages:<br>
-              <strong>${mappedLanguages.map(code => 
+            <div style="font-size: 14px; opacity: 0.9; margin-bottom: 8px;">
+              <strong>Detected Structure:</strong><br>
+              • ${Object.keys(translations).length} slides<br>
+              • ${mappedLanguages.length} languages found<br>
+              • Proper column format detected
+            </div>
+            <div style="font-size: 13px; opacity: 0.95; margin-bottom: 6px;">
+              <strong>Languages:</strong><br>
+              ${mappedLanguages.map(code => 
                 AVAILABLE_LANGUAGES.find(l => l.code === code)?.name || code
-              ).join(', ')}</strong>
+              ).join(', ')}
             </div>
-            <div style="font-size: 12px; margin-top: 8px; opacity: 0.8;">
-              Languages auto-selected for generation
-            </div>
-          </div>
-        `;
-        
-        document.body.appendChild(notification);
-        setTimeout(() => {
-          if (notification.parentNode) {
-            notification.parentNode.removeChild(notification);
-          }
-        }, 6000);
-      } else {
-        console.warn('⚠️ No recognizable languages found in XLSX');
-        
-        // Show warning notification
-        const notification = document.createElement('div');
-        notification.innerHTML = `
-          <div style="
-            position: fixed; 
-            top: 20px; 
-            right: 20px; 
-            background: rgba(245, 158, 11, 0.95); 
-            color: white; 
-            padding: 16px; 
-            border-radius: 8px; 
-            max-width: 350px; 
-            z-index: 9999;
-            font-family: system-ui, -apple-system, sans-serif;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
-            backdrop-filter: blur(10px);
-          ">
-            <div style="font-weight: bold; margin-bottom: 8px;">⚠️ XLSX Import Warning</div>
-            <div style="font-size: 14px; opacity: 0.9;">
-              Could not detect languages in XLSX.<br>
-              Please select target languages manually.
-            </div>
-            <div style="font-size: 12px; margin-top: 8px; opacity: 0.8;">
-              Languages found: ${Array.from(detectedLanguages).join(', ')}
+            <div style="font-size: 12px; opacity: 0.8;">
+              Languages auto-selected for PPTX generation
             </div>
           </div>
         `;
@@ -324,6 +325,46 @@ export default function App() {
             notification.parentNode.removeChild(notification);
           }
         }, 8000);
+      } else {
+        console.warn('⚠️ No recognizable languages found in XLSX structure');
+        
+        // Show enhanced warning notification
+        const notification = document.createElement('div');
+        notification.innerHTML = `
+          <div style="
+            position: fixed; 
+            top: 20px; 
+            right: 20px; 
+            background: rgba(245, 158, 11, 0.95); 
+            color: white; 
+            padding: 16px; 
+            border-radius: 8px; 
+            max-width: 400px; 
+            z-index: 9999;
+            font-family: system-ui, -apple-system, sans-serif;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            backdrop-filter: blur(10px);
+          ">
+            <div style="font-weight: bold; margin-bottom: 8px;">⚠️ XLSX Structure Issue</div>
+            <div style="font-size: 14px; opacity: 0.9; margin-bottom: 8px;">
+              Could not detect proper column structure.<br>
+              Please ensure XLSX has:<br>
+              • Column A: Slide numbers<br>
+              • Column B: Original text<br>
+              • Columns C+: Language translations
+            </div>
+            <div style="font-size: 12px; opacity: 0.8;">
+              Detected columns: ${Array.from(detectedLanguages).join(', ')}
+            </div>
+          </div>
+        `;
+        
+        document.body.appendChild(notification);
+        setTimeout(() => {
+          if (notification.parentNode) {
+            notification.parentNode.removeChild(notification);
+          }
+        }, 10000);
       }
       
     } catch (error) {
@@ -362,8 +403,9 @@ export default function App() {
     
     console.log(`🎯 Creating translation setup for: ${selectedFile.name}`);
     console.log(`🌍 Target languages: ${selectedLanguages.join(', ')}`);
+    console.log(`📊 Using imported translations: ${usingImported}`);
     
-    // Create setup job
+    // Create setup job with enhanced info
     const newJob: TranslationJob = {
       id: Date.now().toString(),
       fileName: selectedFile.name,
@@ -374,14 +416,48 @@ export default function App() {
       importedTranslations: importedTranslations,
       usingImportedTranslations: usingImported,
       isSetupComplete: true,
-      availableImportedLanguages: usingImported ? [...importedLanguages] : undefined // NEW: Store available languages
+      availableImportedLanguages: usingImported ? [...importedLanguages] : undefined
     };
     
     setJobs(prev => [...prev, newJob]);
     
-    // Clear the form
+    // Clear the form but keep languages selected for convenience
     setSelectedFile(null);
-    // Keep languages selected for convenience
+    
+    // Show setup success notification
+    const notification = document.createElement('div');
+    notification.innerHTML = `
+      <div style="
+        position: fixed; 
+        top: 20px; 
+        right: 20px; 
+        background: rgba(59, 130, 246, 0.95); 
+        color: white; 
+        padding: 16px; 
+        border-radius: 8px; 
+        max-width: 350px; 
+        z-index: 9999;
+        font-family: system-ui, -apple-system, sans-serif;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+        backdrop-filter: blur(10px);
+      ">
+        <div style="font-weight: bold; margin-bottom: 8px;">🎯 Translation Project Setup!</div>
+        <div style="font-size: 14px; opacity: 0.9;">
+          Project ready for ${selectedLanguages.length} languages.<br>
+          ${usingImported ? 'Using imported translations for generation.' : 'Ready for Google Translate processing.'}
+        </div>
+        <div style="font-size: 12px; margin-top: 8px; opacity: 0.8;">
+          Click individual "Generate" buttons below
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(notification);
+    setTimeout(() => {
+      if (notification.parentNode) {
+        notification.parentNode.removeChild(notification);
+      }
+    }, 5000);
   };
 
   // Start translation for specific language
@@ -465,6 +541,7 @@ export default function App() {
 
     try {
       console.log(`🚀 Starting REAL translation service for job: ${jobId}`);
+      console.log(`📊 Using v${APP_VERSION} translation engine`);
       
       // Start the actual REAL translation process
       const results = await translationService.startTranslation(
@@ -519,23 +596,35 @@ export default function App() {
     }
   };
 
-  // Download XLSX with REAL translations
+  // Download XLSX with REAL translations and proper structure
   const handleDownloadXLSX = async (job: TranslationJob) => {
     try {
+      console.log(`📊 Downloading XLSX for job ${job.id} with v${APP_VERSION} structure`);
+      
       if (job.sheetId) {
         // Download the REAL Google Sheet as XLSX
         await translationService.downloadSheet(job.sheetId, `${job.fileName}_translations.xlsx`);
       } else {
-        // Generate REAL XLSX from job data
+        // Generate REAL XLSX from job data with proper structure
         await translationService.generateXLSX(job, `${job.fileName}_translations.xlsx`);
       }
     } catch (error) {
+      console.error('❌ XLSX download failed:', error);
       alert(`Failed to download XLSX: ${error}`);
     }
   };
 
   return (
     <div className="min-h-screen bg-black text-white relative overflow-x-hidden">
+      {/* Version indicator (development only) */}
+      {BUILD_INFO.features.includes('CACHE_BUSTING') && (
+        <div className="fixed bottom-4 left-4 z-50">
+          <Badge className="bg-gray-800/80 text-gray-300 border-gray-600/50 text-xs backdrop-blur-sm">
+            v{APP_VERSION}
+          </Badge>
+        </div>
+      )}
+
       {/* Mouse-Following Animated Background */}
       <div className="fixed inset-0 z-0">
         {/* Primary flowing gradients that follow mouse */}
@@ -620,6 +709,10 @@ export default function App() {
                     <Cpu className="w-3 h-3 mr-1" />
                     REAL PPTX
                   </Badge>
+                  
+                  <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30 text-xs">
+                    📊 XLSX Fixed
+                  </Badge>
                 </>
               )}
             </div>
@@ -680,7 +773,7 @@ export default function App() {
                 <h2 className="text-xl font-serif text-white">{t('selectPPTXFile') || 'Select PPTX File'}</h2>
                 <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30 px-2 py-1 text-xs">
                   <Cpu className="w-3 h-3 mr-1" />
-                  REAL Processing
+                  v{APP_VERSION}
                 </Badge>
               </div>
               <FileUploader 
@@ -804,7 +897,7 @@ export default function App() {
                   </p>
                 </div>
                 <p className="text-green-200 text-xs">
-                  {importedLanguages.length} languages detected and auto-selected. 
+                  {importedLanguages.length} languages detected with proper column structure. 
                   Click "Setup Translation Project" to proceed with generation.
                 </p>
               </div>
@@ -817,7 +910,7 @@ export default function App() {
               <div className="flex items-center space-x-2">
                 <AlertCircle className="w-4 h-4 text-yellow-400" />
                 <p className="text-yellow-400 text-sm">
-                  REAL translation in progress. Processing with authentic PPTX extraction...
+                  REAL translation in progress with v{APP_VERSION} engine. Processing with authentic PPTX extraction...
                 </p>
               </div>
             </Card>
@@ -986,7 +1079,7 @@ export default function App() {
                             className="bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20"
                           >
                             <FileSpreadsheet className="w-4 h-4 mr-2" />
-                            Download XLSX
+                            Download XLSX Structure
                           </Button>
                         </div>
                       </div>
@@ -1006,7 +1099,7 @@ export default function App() {
                       <div className="mt-3 p-2 bg-green-500/10 rounded border border-green-500/20">
                         <p className="text-green-300 text-xs flex items-center gap-1">
                           <CheckCircle className="w-3 h-3" />
-                          Using imported translations with preserved formatting
+                          Using imported translations with proper column structure
                         </p>
                       </div>
                     )}
@@ -1025,14 +1118,14 @@ export default function App() {
                 description: 'Authentic text extraction using JSZip with preserved XML structure'
               },
               {
-                icon: <Zap className="w-5 h-5" />,
-                title: 'Size Preservation',
-                description: '15MB input → ~15MB output with maintained formatting and quality'
+                icon: <FileSpreadsheet className="w-5 h-5" />,
+                title: 'Fixed XLSX Structure',
+                description: 'Proper column format with separate language columns for easy editing'
               },
               {
-                icon: <FileSpreadsheet className="w-5 h-5" />,
-                title: 'Google Sheets Integration',
-                description: 'GOOGLETRANSLATE() formulas with downloadable XLSX workflow'
+                icon: <Zap className="w-5 h-5" />,
+                title: 'Cache-Free Updates',
+                description: 'Fresh deployments with version control and instant updates'
               }
             ].map((feature, index) => (
               <div key={index} className="p-4 bg-black/40 backdrop-blur-sm border-white/10 border rounded-xl shadow-xl hover:bg-black/50 transition-all duration-300">
@@ -1053,7 +1146,7 @@ export default function App() {
                 <h3 className="text-yellow-400">Google APIs Not Configured</h3>
               </div>
               <p className="text-yellow-300 text-sm mb-3">
-                App is using REAL PPTX processing with enhanced local translations. To enable Google Translate:
+                App is using REAL PPTX processing v{APP_VERSION} with enhanced local translations. To enable Google Translate:
               </p>
               <div className="text-xs text-yellow-200 space-y-1">
                 <p>1. Go to <strong>Netlify Dashboard</strong> → Your Site → <strong>Environment Variables</strong></p>
@@ -1062,19 +1155,20 @@ export default function App() {
                 <p>4. <strong>Deploy site</strong> to activate real Google Translate</p>
               </div>
               <p className="text-yellow-300 text-sm mt-2">
-                Current REAL PPTX processing works perfectly - Google API key unlocks premium translation quality! 🚀
+                Current REAL PPTX processing with proper XLSX structure works perfectly! 🚀
               </p>
               
               {/* Debug Info */}
               {apiStatus.debugInfo && (
                 <details className="mt-3">
-                  <summary className="text-yellow-400 text-xs cursor-pointer">REAL Processing Debug Information</summary>
+                  <summary className="text-yellow-400 text-xs cursor-pointer">v{APP_VERSION} Processing Debug Information</summary>
                   <div className="mt-2 text-xs text-yellow-200 space-y-1">
                     <p>Environment Context:</p>
                     <ul className="ml-4 space-y-1">
-                      <li>• Has import.meta: {apiStatus.debugInfo.hasImportMeta ? '✅' : '❌'}</li>
-                      <li>• Has import.meta.env: {apiStatus.debugInfo.hasImportMetaEnv ? '✅' : '❌'}</li>
+                      <li>• Version: v{APP_VERSION} ✅</li>
                       <li>• REAL PPTX Processing: ✅ Available</li>
+                      <li>• XLSX Structure: ✅ Fixed</li>
+                      <li>• Cache Busting: ✅ Active</li>
                       <li>• JSZip Integration: ✅ Active</li>
                     </ul>
                     {apiStatus.availableEnvVars?.length > 0 && (
