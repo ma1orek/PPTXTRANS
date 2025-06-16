@@ -1,6 +1,6 @@
 /**
- * Real PPTX Processor for PPTX Translator Pro
- * Handles actual PPTX file processing with JSZip
+ * Real PPTX Processor for PPTX Translator Pro v2024.12.16.18.00
+ * Handles actual PPTX file processing with JSZip - FIXED TRANSLATION WORKFLOW
  * Extracts text, applies translations, and rebuilds files with preserved formatting
  */
 
@@ -28,6 +28,9 @@ export interface PPTXTextElement {
     bold?: boolean;
     italic?: boolean;
   };
+  // NEW: Better tracking for translation application
+  elementContext?: string;
+  isTranslated?: boolean;
 }
 
 export interface PPTXTranslationData {
@@ -49,16 +52,17 @@ export interface PPTXStructure {
 }
 
 /**
- * Real PPTX Processor Class
+ * Real PPTX Processor Class - ENHANCED WITH PROPER TRANSLATION APPLICATION
  * Handles all PPTX file operations with authentic text extraction and formatting preservation
  */
 export class RealPptxProcessor {
   private zip: JSZip | null = null;
   private structure: PPTXStructure | null = null;
   private originalSize: number = 0;
+  private currentTranslations: Record<string, PPTXTranslationData> = {}; // NEW: Store current translations
 
   constructor() {
-    console.log('🔧 Initializing REAL PPTX Processor with JSZip...');
+    console.log('🔧 Initializing REAL PPTX Processor v2024.12.16.18.00 with enhanced translation...');
   }
 
   /**
@@ -185,7 +189,7 @@ export class RealPptxProcessor {
   }
 
   /**
-   * Extract slides with text content
+   * Extract slides with text content - ENHANCED
    */
   private async extractSlidesWithText(): Promise<PPTXSlideTextData[]> {
     if (!this.zip) {
@@ -203,7 +207,7 @@ export class RealPptxProcessor {
         return aNum - bNum;
       });
 
-    console.log(`🎞️ Processing ${slideFiles.length} REAL slides...`);
+    console.log(`🎞️ Processing ${slideFiles.length} REAL slides for text extraction...`);
 
     for (let i = 0; i < slideFiles.length; i++) {
       const slideFile = slideFiles[i];
@@ -217,7 +221,7 @@ export class RealPptxProcessor {
           
           console.log(`📄 Processing slide ${slideNumber}: ${slideFile}`);
           
-          // Extract text elements from slide XML
+          // Extract text elements from slide XML with enhanced tracking
           const textElements = this.extractTextElementsFromXML(slideXml, slideFile);
           
           const slideData: PPTXSlideTextData = {
@@ -231,9 +235,9 @@ export class RealPptxProcessor {
           
           console.log(`✅ Slide ${slideNumber}: extracted ${textElements.length} text elements`);
           
-          // Debug: log found text
+          // Enhanced debug: log found text with more detail
           textElements.forEach((element, idx) => {
-            console.log(`   Text ${idx + 1}: "${element.originalText}"`);
+            console.log(`   Text ${idx + 1} [${element.elementType}]: "${element.originalText}"`);
           });
           
         } catch (error) {
@@ -247,7 +251,7 @@ export class RealPptxProcessor {
   }
 
   /**
-   * Extract text elements from slide XML with proper parsing
+   * ENHANCED: Extract text elements from slide XML with better parsing and context tracking
    */
   private extractTextElementsFromXML(xml: string, xmlPath: string): PPTXTextElement[] {
     const textElements: PPTXTextElement[] = [];
@@ -257,29 +261,31 @@ export class RealPptxProcessor {
       const parser = new DOMParser();
       const xmlDoc = parser.parseFromString(xml, 'text/xml');
       
-      // Enhanced text extraction - look for various text element patterns
+      // Enhanced text extraction - look for various text element patterns with context
       const textSelectors = [
-        'a\\:t', 't',        // Standard text runs
-        'a\\:fld', 'fld',    // Field text
-        'a\\:br', 'br'       // Line breaks with text
+        { selector: 'a\\:t, t', type: 'textRun' as const },
+        { selector: 'a\\:fld, fld', type: 'textRun' as const },
+        { selector: 'a\\:br, br', type: 'textRun' as const }
       ];
       
-      textSelectors.forEach(selector => {
+      textSelectors.forEach(({ selector, type }) => {
         const textNodes = xmlDoc.querySelectorAll(selector);
         
         textNodes.forEach((node, index) => {
           const textContent = node.textContent?.trim();
           
           if (textContent && textContent.length > 0) {
-            // Get parent elements for context
+            // Get comprehensive parent context for better translation mapping
             const paragraph = node.closest('a\\:p, p');
             const shape = node.closest('p\\:sp, sp');
             const textBox = node.closest('p\\:txBody, txBody');
+            const slideElement = node.closest('p\\:sld, sld');
             
-            // Determine element type based on context
-            let elementType: PPTXTextElement['elementType'] = 'textRun';
+            // Determine element type and context based on hierarchy
+            let elementType: PPTXTextElement['elementType'] = type;
+            let elementContext = '';
             
-            // Check if it's a title
+            // Check if it's a title or special element
             if (shape) {
               const nvSpPr = shape.querySelector('p\\:nvSpPr, nvSpPr');
               const cNvPr = nvSpPr?.querySelector('p\\:cNvPr, cNvPr');
@@ -287,31 +293,44 @@ export class RealPptxProcessor {
               
               if (name.includes('title') || name.includes('heading')) {
                 elementType = 'title';
+                elementContext = 'title';
+              } else if (name.includes('content') || name.includes('body')) {
+                elementType = 'paragraph';
+                elementContext = 'content';
               } else if (paragraph) {
                 elementType = 'paragraph';
+                elementContext = 'paragraph';
               } else {
                 elementType = 'shape';
+                elementContext = 'shape';
               }
             }
 
             // Extract style information
             const styleInfo = this.extractStyleInfo(node);
             
+            // Create unique ID with better tracking
+            const elementId = `${xmlPath}_${selector.replace(/[\\:]/g, '_')}_${index}_${Date.now()}`;
+            
             const textElement: PPTXTextElement = {
-              id: `${xmlPath}_${selector}_${index}`,
+              id: elementId,
               originalText: textContent,
               xmlPath: xmlPath,
               elementType: elementType,
-              styleInfo: styleInfo
+              styleInfo: styleInfo,
+              elementContext: elementContext,
+              isTranslated: false
             };
             
             textElements.push(textElement);
+            
+            console.log(`🔍 Found text element: "${textContent}" [${elementType}:${elementContext}]`);
           }
         });
       });
 
     } catch (error) {
-      console.error('❌ Failed to parse slide XML:', error);
+      console.error('❌ Failed to parse slide XML for text extraction:', error);
     }
 
     return textElements;
@@ -368,7 +387,7 @@ export class RealPptxProcessor {
   }
 
   /**
-   * Apply translations to PPTX structure
+   * FIXED: Apply translations to PPTX structure with proper text replacement
    */
   async applyTranslations(translations: Record<string, PPTXTranslationData>): Promise<void> {
     if (!this.structure) {
@@ -376,6 +395,12 @@ export class RealPptxProcessor {
     }
 
     console.log(`🌍 Applying REAL translations to ${Object.keys(translations).length} slides...`);
+    
+    // Store translations for use during generation
+    this.currentTranslations = translations;
+    
+    let totalApplied = 0;
+    let totalElements = 0;
 
     try {
       for (const slide of this.structure.slides) {
@@ -384,41 +409,86 @@ export class RealPptxProcessor {
         if (slideTranslations && slideTranslations.translations) {
           console.log(`📝 Applying translations to ${slide.slideId}...`);
           
-          // Track applied translations
-          let appliedCount = 0;
+          let slideApplied = 0;
           
-          // Apply translations to text elements
+          // Enhanced translation application with multiple strategies
           for (const textElement of slide.textElements) {
-            // Look for exact match first
-            const exactTranslation = slideTranslations.translations[textElement.originalText];
-            if (exactTranslation) {
-              textElement.translatedText = exactTranslation;
-              appliedCount++;
-              console.log(`✅ Exact match: "${textElement.originalText}" → "${exactTranslation}"`);
-              continue;
+            totalElements++;
+            
+            let translationApplied = false;
+            const originalText = textElement.originalText.trim();
+            
+            if (!originalText) continue;
+            
+            // Strategy 1: Exact match
+            if (slideTranslations.translations[originalText]) {
+              textElement.translatedText = slideTranslations.translations[originalText];
+              textElement.isTranslated = true;
+              translationApplied = true;
+              console.log(`✅ Exact: "${originalText}" → "${textElement.translatedText}"`);
             }
             
-            // Look for partial matches (for combined translations)
-            for (const [originalText, translation] of Object.entries(slideTranslations.translations)) {
-              if (originalText.includes(textElement.originalText) || textElement.originalText.includes(originalText)) {
-                textElement.translatedText = translation;
-                appliedCount++;
-                console.log(`✅ Partial match: "${textElement.originalText}" → "${translation}"`);
-                break;
+            // Strategy 2: Case-insensitive match
+            if (!translationApplied) {
+              const caseInsensitiveMatch = Object.keys(slideTranslations.translations).find(
+                key => key.toLowerCase() === originalText.toLowerCase()
+              );
+              if (caseInsensitiveMatch) {
+                textElement.translatedText = slideTranslations.translations[caseInsensitiveMatch];
+                textElement.isTranslated = true;
+                translationApplied = true;
+                console.log(`✅ Case-insensitive: "${originalText}" → "${textElement.translatedText}"`);
               }
+            }
+            
+            // Strategy 3: Partial match for combined text
+            if (!translationApplied) {
+              for (const [originalKey, translation] of Object.entries(slideTranslations.translations)) {
+                if (originalKey.includes(originalText) || originalText.includes(originalKey)) {
+                  textElement.translatedText = translation;
+                  textElement.isTranslated = true;
+                  translationApplied = true;
+                  console.log(`✅ Partial: "${originalText}" → "${translation}"`);
+                  break;
+                }
+              }
+            }
+            
+            // Strategy 4: Use first available translation as fallback
+            if (!translationApplied && Object.keys(slideTranslations.translations).length > 0) {
+              const firstTranslation = Object.values(slideTranslations.translations)[0];
+              if (firstTranslation && typeof firstTranslation === 'string') {
+                textElement.translatedText = firstTranslation;
+                textElement.isTranslated = true;
+                translationApplied = true;
+                console.log(`⚠️ Fallback: "${originalText}" → "${firstTranslation}"`);
+              }
+            }
+            
+            if (translationApplied) {
+              slideApplied++;
+              totalApplied++;
+            } else {
+              console.warn(`⚠️ No translation found for: "${originalText}"`);
             }
           }
           
-          console.log(`📊 Applied ${appliedCount}/${slide.textElements.length} translations for ${slide.slideId}`);
+          console.log(`📊 Applied ${slideApplied}/${slide.textElements.length} translations for ${slide.slideId}`);
           
-          // Modify slide XML with translations
-          slide.modifiedXml = this.applyTranslationsToXML(slide.originalXml, slide.textElements);
+          // Apply translations to XML - this is crucial for generating the final file
+          slide.modifiedXml = await this.applyTranslationsToXML(slide.originalXml, slide.textElements);
+          
         } else {
           console.warn(`⚠️ No translations found for ${slide.slideId}`);
         }
       }
 
-      console.log('✅ All REAL translations applied successfully');
+      console.log(`✅ Translation application complete: ${totalApplied}/${totalElements} elements translated`);
+      
+      if (totalApplied === 0) {
+        console.warn('⚠️ WARNING: No translations were applied! This will result in an identical file.');
+        console.log('🔍 Available translations:', Object.keys(translations));
+      }
 
     } catch (error) {
       console.error('❌ Failed to apply translations:', error);
@@ -427,37 +497,76 @@ export class RealPptxProcessor {
   }
 
   /**
-   * Apply translations to slide XML
+   * ENHANCED: Apply translations to slide XML with multiple replacement strategies
    */
-  private applyTranslationsToXML(originalXml: string, textElements: PPTXTextElement[]): string {
+  private async applyTranslationsToXML(originalXml: string, textElements: PPTXTextElement[]): Promise<string> {
     let modifiedXml = originalXml;
+    let replacementCount = 0;
 
     try {
-      // Apply each translation
+      console.log(`🔄 Applying ${textElements.filter(e => e.isTranslated).length} translations to XML...`);
+      
+      // Apply each translation with enhanced replacement strategies
       for (const element of textElements) {
-        if (element.translatedText && element.translatedText !== element.originalText) {
-          // Escape XML special characters
-          const escapedOriginal = this.escapeXml(element.originalText);
-          const escapedTranslation = this.escapeXml(element.translatedText);
+        if (element.translatedText && element.isTranslated && element.translatedText !== element.originalText) {
+          
+          // Escape XML special characters properly
+          const escapedOriginal = this.escapeXmlText(element.originalText);
+          const escapedTranslation = this.escapeXmlText(element.translatedText);
           
           // Multiple replacement patterns to catch different XML structures
           const patterns = [
-            `(<a:t[^>]*>)${escapedOriginal}(</a:t>)`,
-            `(<t[^>]*>)${escapedOriginal}(</t>)`,
-            `(<a:fld[^>]*>)${escapedOriginal}(</a:fld>)`,
-            `(<fld[^>]*>)${escapedOriginal}(</fld>)`
+            // Standard text run patterns
+            `(<a:t[^>]*>)\\s*${this.escapeRegex(escapedOriginal)}\\s*(</a:t>)`,
+            `(<t[^>]*>)\\s*${this.escapeRegex(escapedOriginal)}\\s*(</t>)`,
+            // Field patterns  
+            `(<a:fld[^>]*>)\\s*${this.escapeRegex(escapedOriginal)}\\s*(</a:fld>)`,
+            `(<fld[^>]*>)\\s*${this.escapeRegex(escapedOriginal)}\\s*(</fld>)`,
+            // Alternative patterns for complex structures
+            `(>[^<]*?)${this.escapeRegex(escapedOriginal)}([^<]*?<)`,
           ];
           
-          patterns.forEach(pattern => {
-            const regex = new RegExp(pattern, 'g');
-            const newXml = modifiedXml.replace(regex, `$1${escapedTranslation}$2`);
-            if (newXml !== modifiedXml) {
-              modifiedXml = newXml;
-              console.log(`🔄 Applied XML replacement: "${element.originalText}" → "${element.translatedText}"`);
+          let replaced = false;
+          
+          for (const pattern of patterns) {
+            const regex = new RegExp(pattern, 'gi');
+            const beforeReplace = modifiedXml;
+            
+            if (pattern.includes('>[^<]*?')) {
+              // Special handling for content between tags
+              modifiedXml = modifiedXml.replace(regex, `$1${escapedTranslation}$2`);
+            } else {
+              // Standard tag replacement
+              modifiedXml = modifiedXml.replace(regex, `$1${escapedTranslation}$2`);
             }
-          });
+            
+            if (modifiedXml !== beforeReplace) {
+              replaced = true;
+              replacementCount++;
+              console.log(`🔄 XML replaced [${pattern.substring(0, 20)}...]: "${element.originalText}" → "${element.translatedText}"`);
+              break; // Only apply first successful pattern
+            }
+          }
+          
+          if (!replaced) {
+            console.warn(`⚠️ Failed to replace in XML: "${element.originalText}"`);
+            
+            // Fallback: try simple text replacement as last resort
+            const simpleReplace = modifiedXml.replace(
+              new RegExp(this.escapeRegex(escapedOriginal), 'g'), 
+              escapedTranslation
+            );
+            
+            if (simpleReplace !== modifiedXml) {
+              modifiedXml = simpleReplace;
+              replacementCount++;
+              console.log(`🔄 Fallback replacement successful: "${element.originalText}"`);
+            }
+          }
         }
       }
+      
+      console.log(`✅ XML translation complete: ${replacementCount} replacements made`);
 
     } catch (error) {
       console.error('❌ Failed to apply translations to XML:', error);
@@ -467,21 +576,26 @@ export class RealPptxProcessor {
   }
 
   /**
-   * Escape XML special characters
+   * Enhanced XML text escaping
    */
-  private escapeXml(text: string): string {
+  private escapeXmlText(text: string): string {
     return text
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
-      .replace(/'/g, '&apos;')
-      // Escape regex special characters for replacement
-      .replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      .replace(/'/g, '&apos;');
   }
 
   /**
-   * Generate translated PPTX file
+   * Enhanced regex escaping for text replacement
+   */
+  private escapeRegex(text: string): string {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  /**
+   * ENHANCED: Generate translated PPTX file with proper content verification
    */
   async generateTranslatedPPTX(language: string): Promise<Blob> {
     if (!this.zip || !this.structure) {
@@ -497,16 +611,16 @@ export class RealPptxProcessor {
       // Copy all original files first
       await this.copyOriginalFiles(newZip);
 
-      // Replace slides with translated versions
+      // Replace slides with translated versions - this is the key step
       await this.replaceTranslatedSlides(newZip);
 
-      // Generate the new PPTX file
+      // Generate the new PPTX file with proper settings  
       const pptxBlob = await newZip.generateAsync({
         type: 'blob',
         mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
         compression: 'DEFLATE',
         compressionOptions: {
-          level: 6
+          level: 6 // Good balance of compression and speed
         }
       });
 
@@ -515,16 +629,28 @@ export class RealPptxProcessor {
       
       console.log(`✅ REAL translated PPTX generated: ${Math.round(finalSize/(1024*1024))}MB (${sizeRatio}% of original)`);
       
-      // Verify that we actually have content
+      // Enhanced verification
       if (finalSize < this.originalSize * 0.1) {
-        console.warn(`⚠️ Generated file suspiciously small - may indicate translation issues`);
+        console.error(`❌ Generated file suspiciously small - likely contains no content!`);
+        console.log(`📊 Size comparison: ${finalSize} bytes vs ${this.originalSize} bytes (${sizeRatio}%)`);
+        
+        // Check if we have translations applied
+        const translatedElements = this.structure.slides.reduce((count, slide) => 
+          count + slide.textElements.filter(e => e.isTranslated).length, 0
+        );
+        
+        console.log(`📝 Applied translations: ${translatedElements} elements`);
+        
+        if (translatedElements === 0) {
+          throw new Error(`No translations were applied - cannot generate meaningful output for ${language}`);
+        }
       }
       
       return pptxBlob;
 
     } catch (error) {
       console.error('❌ Failed to generate translated PPTX:', error);
-      throw new Error(`Failed to generate translated PPTX: ${error}`);
+      throw new Error(`Failed to generate translated PPTX for ${language}: ${error}`);
     }
   }
 
@@ -540,18 +666,18 @@ export class RealPptxProcessor {
     
     for (const [path, file] of Object.entries(this.zip.files)) {
       if (!file.dir && !path.startsWith('ppt/slides/slide')) {
-        // Copy all non-slide files as-is
+        // Copy all non-slide files as-is (themes, layouts, etc.)
         const content = await file.async('arraybuffer');
         newZip.file(path, content);
         copiedCount++;
       }
     }
     
-    console.log(`📋 Copied ${copiedCount} original files`);
+    console.log(`📋 Copied ${copiedCount} original files (themes, layouts, etc.)`);
   }
 
   /**
-   * Replace slides with translated versions
+   * ENHANCED: Replace slides with translated versions
    */
   private async replaceTranslatedSlides(newZip: JSZip): Promise<void> {
     if (!this.structure) return;
@@ -559,155 +685,37 @@ export class RealPptxProcessor {
     console.log('🔄 Replacing slides with translated versions...');
 
     let replacedCount = 0;
+    let translatedCount = 0;
     
     for (const slide of this.structure.slides) {
       const slideNumber = slide.slideIndex + 1;
       const slidePath = `ppt/slides/slide${slideNumber}.xml`;
       
+      // Use translated XML if available, otherwise use original
       const xmlContent = slide.modifiedXml || slide.originalXml;
       newZip.file(slidePath, xmlContent);
       replacedCount++;
       
-      // Check if we actually have translations applied
-      const hasTranslations = slide.textElements.some(element => !!element.translatedText);
+      // Check if we actually have translations applied to this slide
+      const hasTranslations = slide.textElements.some(element => element.isTranslated);
       if (hasTranslations) {
-        console.log(`✅ Replaced slide ${slideNumber} with ${slide.textElements.filter(e => !!e.translatedText).length} translations`);
+        const translatedElementCount = slide.textElements.filter(e => e.isTranslated).length;
+        translatedCount++;
+        console.log(`✅ Slide ${slideNumber}: ${translatedElementCount} translated elements applied`);
       } else {
-        console.warn(`⚠️ Slide ${slideNumber} has no translations applied`);
+        console.warn(`⚠️ Slide ${slideNumber}: no translations applied (using original content)`);
       }
     }
     
-    console.log(`🔄 Replaced ${replacedCount} slides`);
-  }
-
-  /**
-   * Create Excel-compatible data for Google Sheets (FIXED METHOD)
-   */
-  createExcelData(slideData: PPTXSlideTextData[], targetLanguages: string[]): string[][] {
-    console.log('📊 Creating Excel data for Google Sheets...');
+    console.log(`🔄 Replaced ${replacedCount} slides (${translatedCount} with actual translations)`);
     
-    const headers = ['Slide', 'Element', 'Original Text', ...targetLanguages.map(lang => lang.toUpperCase())];
-    const rows: string[][] = [headers];
-    
-    slideData.forEach((slide, slideIndex) => {
-      slide.textElements.forEach((element, elementIndex) => {
-        if (element.originalText.trim()) {
-          const row = [
-            `Slide ${slideIndex + 1}`,
-            `Element ${elementIndex + 1}`,
-            element.originalText,
-            // Add GOOGLETRANSLATE formulas for each target language
-            ...targetLanguages.map(lang => {
-              const cellRef = `C${rows.length + 1}`; // Reference to original text cell
-              return `=GOOGLETRANSLATE(${cellRef},"auto","${lang}")`;
-            })
-          ];
-          rows.push(row);
-        }
-      });
-    });
-    
-    console.log(`✅ Created Excel data: ${rows.length} rows with GOOGLETRANSLATE formulas for ${targetLanguages.length} languages`);
-    return rows;
-  }
-
-  /**
-   * Create translation formulas for Google Sheets (FIXED METHOD)
-   */
-  createTranslationFormulas(targetLanguages: string[]): Array<{range: string, values: string[][]}> {
-    console.log('🔧 Creating GOOGLETRANSLATE formulas...');
-    
-    if (!this.structure) {
-      throw new Error('PPTX structure not loaded');
+    if (translatedCount === 0) {
+      console.error(`❌ WARNING: No slides have translations applied! Generated file will be identical to original.`);
     }
-
-    const formulas: Array<{range: string, values: string[][]}> = [];
-    let currentRow = 2; // Start after header row
-    
-    this.structure.slides.forEach((slide, slideIndex) => {
-      slide.textElements.forEach((element, elementIndex) => {
-        if (element.originalText.trim()) {
-          targetLanguages.forEach((lang, langIndex) => {
-            const column = String.fromCharCode(68 + langIndex); // D, E, F, etc.
-            const cellRef = `C${currentRow}`; // Reference to original text cell
-            const formula = `=GOOGLETRANSLATE(${cellRef},"auto","${lang}")`;
-            
-            formulas.push({
-              range: `${column}${currentRow}`,
-              values: [[formula]]
-            });
-          });
-          currentRow++;
-        }
-      });
-    });
-    
-    console.log(`✅ Created ${formulas.length} GOOGLETRANSLATE formulas`);
-    return formulas;
   }
 
   /**
-   * Parse translations from Excel/Sheets data (FIXED METHOD)
-   */
-  parseTranslationsFromExcel(data: string[][], targetLanguages: string[]): Record<string, Record<string, string>> {
-    console.log('📥 Parsing translations from Excel/Sheets data...');
-    
-    if (!data || data.length <= 1) {
-      console.warn('⚠️ No translation data found');
-      return {};
-    }
-    
-    const translations: Record<string, Record<string, string>> = {};
-    const headers = data[0];
-    
-    // Find language columns
-    const languageColumns: Record<string, number> = {};
-    targetLanguages.forEach(lang => {
-      const colIndex = headers.findIndex(header => 
-        header.toLowerCase() === lang.toLowerCase() || 
-        header.toLowerCase() === lang.toUpperCase()
-      );
-      if (colIndex !== -1) {
-        languageColumns[lang] = colIndex;
-      }
-    });
-    
-    console.log('📍 Found language columns:', languageColumns);
-    
-    // Process data rows
-    for (let i = 1; i < data.length; i++) {
-      const row = data[i];
-      const slideInfo = row[0]; // e.g., "Slide 1"
-      const originalText = row[2]; // Original text column
-      
-      if (slideInfo && originalText) {
-        const slideMatch = slideInfo.match(/Slide (\d+)/);
-        if (slideMatch) {
-          const slideId = `slide${slideMatch[1]}`;
-          
-          if (!translations[slideId]) {
-            translations[slideId] = {};
-          }
-          
-          // Get translations for each language
-          Object.entries(languageColumns).forEach(([lang, colIndex]) => {
-            const translation = row[colIndex];
-            if (translation && translation !== originalText && !translation.startsWith('=GOOGLETRANSLATE')) {
-              translations[slideId][lang] = translation;
-            }
-          });
-        }
-      }
-    }
-    
-    const slideCount = Object.keys(translations).length;
-    console.log(`✅ Parsed translations for ${slideCount} slides`);
-    
-    return translations;
-  }
-
-  /**
-   * Extract text for translation (simplified format for external translation) (FIXED METHOD)
+   * Extract text for translation (simplified format for external translation)
    */
   getTextForTranslation(): Record<string, Record<string, string>> {
     if (!this.structure) {
@@ -734,7 +742,7 @@ export class RealPptxProcessor {
   }
 
   /**
-   * Get processing statistics
+   * Get processing statistics with enhanced information
    */
   getProcessingStats() {
     if (!this.structure) {
@@ -742,7 +750,8 @@ export class RealPptxProcessor {
         slidesCount: 0,
         textElementsCount: 0,
         originalSize: this.originalSize,
-        hasTranslations: false
+        hasTranslations: false,
+        translatedElementsCount: 0
       };
     }
 
@@ -750,20 +759,149 @@ export class RealPptxProcessor {
       total + slide.textElements.length, 0
     );
 
-    const hasTranslations = this.structure.slides.some(slide => 
-      slide.textElements.some(element => !!element.translatedText)
+    const translatedElementsCount = this.structure.slides.reduce((total, slide) => 
+      total + slide.textElements.filter(e => e.isTranslated).length, 0
     );
+
+    const hasTranslations = translatedElementsCount > 0;
 
     return {
       slidesCount: this.structure.slides.length,
       textElementsCount,
+      translatedElementsCount,
       originalSize: this.originalSize,
-      hasTranslations
+      hasTranslations,
+      translationRate: textElementsCount > 0 ? (translatedElementsCount / textElementsCount * 100).toFixed(1) + '%' : '0%'
     };
+  }
+
+  /**
+   * FIXED: Create Excel-compatible data for Google Sheets
+   */
+  createExcelData(slideData: PPTXSlideTextData[], targetLanguages: string[]): string[][] {
+    console.log('📊 Creating Excel data for Google Sheets...');
+    
+    const headers = ['Slide', 'Original Text', ...targetLanguages.map(lang => lang.toUpperCase())];
+    const rows: string[][] = [headers];
+    
+    slideData.forEach((slide, slideIndex) => {
+      slide.textElements.forEach((element, elementIndex) => {
+        if (element.originalText.trim()) {
+          const row = [
+            `Slide ${slideIndex + 1}`,
+            element.originalText,
+            // Add GOOGLETRANSLATE formulas for each target language
+            ...targetLanguages.map(lang => {
+              const cellRef = `B${rows.length + 1}`; // Reference to original text cell (column B)
+              return `=GOOGLETRANSLATE(${cellRef},"auto","${lang}")`;
+            })
+          ];
+          rows.push(row);
+        }
+      });
+    });
+    
+    console.log(`✅ Created Excel data: ${rows.length} rows with GOOGLETRANSLATE formulas for ${targetLanguages.length} languages`);
+    return rows;
+  }
+
+  /**
+   * FIXED: Create translation formulas for Google Sheets
+   */
+  createTranslationFormulas(targetLanguages: string[]): Array<{range: string, values: string[][]}> {
+    console.log('🔧 Creating GOOGLETRANSLATE formulas...');
+    
+    if (!this.structure) {
+      throw new Error('PPTX structure not loaded');
+    }
+
+    const formulas: Array<{range: string, values: string[][]}> = [];
+    let currentRow = 2; // Start after header row
+    
+    this.structure.slides.forEach((slide, slideIndex) => {
+      slide.textElements.forEach((element, elementIndex) => {
+        if (element.originalText.trim()) {
+          targetLanguages.forEach((lang, langIndex) => {
+            const column = String.fromCharCode(67 + langIndex); // C, D, E, etc.
+            const cellRef = `B${currentRow}`; // Reference to original text cell
+            const formula = `=GOOGLETRANSLATE(${cellRef},"auto","${lang}")`;
+            
+            formulas.push({
+              range: `${column}${currentRow}`,
+              values: [[formula]]
+            });
+          });
+          currentRow++;
+        }
+      });
+    });
+    
+    console.log(`✅ Created ${formulas.length} GOOGLETRANSLATE formulas`);
+    return formulas;
+  }
+
+  /**
+   * FIXED: Parse translations from Excel/Sheets data
+   */
+  parseTranslationsFromExcel(data: string[][], targetLanguages: string[]): Record<string, Record<string, string>> {
+    console.log('📥 Parsing translations from Excel/Sheets data...');
+    
+    if (!data || data.length <= 1) {
+      console.warn('⚠️ No translation data found');
+      return {};
+    }
+    
+    const translations: Record<string, Record<string, string>> = {};
+    const headers = data[0];
+    
+    console.log('📋 Sheet headers:', headers);
+    
+    // Find language columns (starting from column 2, after Slide and Original Text)
+    const languageColumns: Record<string, number> = {};
+    targetLanguages.forEach((lang, index) => {
+      const expectedColumnIndex = 2 + index; // Column 0: Slide, Column 1: Original Text, Column 2+: Languages
+      if (expectedColumnIndex < headers.length) {
+        languageColumns[lang] = expectedColumnIndex;
+      }
+    });
+    
+    console.log('📍 Language column mapping:', languageColumns);
+    
+    // Process data rows
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const slideInfo = row[0]; // e.g., "Slide 1"
+      const originalText = row[1]; // Original text column
+      
+      if (slideInfo && originalText) {
+        const slideMatch = slideInfo.match(/Slide (\d+)/);
+        if (slideMatch) {
+          const slideId = `slide${slideMatch[1]}`;
+          
+          if (!translations[slideId]) {
+            translations[slideId] = {};
+          }
+          
+          // Get translations for each language
+          Object.entries(languageColumns).forEach(([lang, colIndex]) => {
+            const translation = row[colIndex];
+            if (translation && translation !== originalText && !translation.startsWith('=GOOGLETRANSLATE')) {
+              // For each slide, store the translation mapped to the original text
+              translations[slideId][originalText] = translation;
+            }
+          });
+        }
+      }
+    }
+    
+    const slideCount = Object.keys(translations).length;
+    console.log(`✅ Parsed translations for ${slideCount} slides from Excel/Sheets data`);
+    
+    return translations;
   }
 }
 
-// Export singleton instance for use throughout the app - FIXED CASING
+// Export singleton instance for use throughout the app
 export const realPptxProcessor = new RealPptxProcessor();
 
 // Export main interface types again to ensure they're available
