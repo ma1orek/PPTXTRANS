@@ -13,12 +13,12 @@ import { useTranslation } from './hooks/useTranslation';
 import { translationService, TranslationResult } from './services/translationService';
 import { googleApiService } from './services/googleApi';
 
-// AGGRESSIVE VERSION - Force cache invalidation
-const APP_VERSION = '2024.12.16.18.30'; // Updated timestamp for XLSX workflow fix
+// FIXED VERSION - Removed problematic Service Worker
+const APP_VERSION = '2024.12.16.19.00'; // Updated timestamp for SW fix
 const BUILD_INFO = {
   version: APP_VERSION,
   buildTime: new Date().toISOString(),
-  features: ['REAL_PPTX_PROCESSING', 'XLSX_WORKFLOW_FIXED', 'LANGUAGE_SELECTION_FIXED', 'AGGRESSIVE_CACHE_BUSTING']
+  features: ['REAL_PPTX_PROCESSING', 'XLSX_WORKFLOW_FIXED', 'LANGUAGE_SELECTION_FIXED', 'SERVICE_WORKER_FIXED']
 };
 
 type TranslationJob = {
@@ -134,7 +134,7 @@ export default function App() {
   const [importedFileName, setImportedFileName] = useState<string>('');
   const [importedLanguages, setImportedLanguages] = useState<string[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [cacheStatus, setCacheStatus] = useState<string>('checking');
+  const [cacheStatus, setCacheStatus] = useState<string>('ready');
   const { t, currentLanguage, changeLanguage } = useTranslation();
   
   // DEBUG: Log selectedLanguages state changes
@@ -156,43 +156,12 @@ export default function App() {
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
-  // AGGRESSIVE CACHE BUSTING - Multiple strategies
+  // FIXED: Effective cache busting without problematic Service Worker
   useEffect(() => {
-    console.log(`🚀 PPTX Translator Pro v${APP_VERSION} - XLSX WORKFLOW FIXED`);
+    console.log(`🚀 PPTX Translator Pro v${APP_VERSION} - SERVICE WORKER FIXED`);
     console.log('📋 Build Info:', BUILD_INFO);
     
-    // Strategy 1: Service Worker Cache Clear
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js', { 
-        scope: '/',
-        updateViaCache: 'none' // Never cache the service worker itself
-      }).then((registration) => {
-        console.log('✅ Service Worker registered for cache busting');
-        
-        // Force update check
-        registration.update();
-        
-        // Send cache clear message
-        if (registration.active) {
-          registration.active.postMessage({ type: 'CLEAR_CACHE' });
-        }
-        
-        setCacheStatus('cleared');
-      }).catch((error) => {
-        console.warn('⚠️ Service Worker registration failed:', error);
-        setCacheStatus('error');
-      });
-      
-      // Listen for cache clear confirmation
-      navigator.serviceWorker.addEventListener('message', (event) => {
-        if (event.data.type === 'CACHE_CLEARED') {
-          console.log('✅ Cache cleared by service worker');
-          setCacheStatus('success');
-        }
-      });
-    }
-    
-    // Strategy 2: Meta tags for cache control
+    // Strategy 1: Meta tags for cache control - RELIABLE
     const metaTags = [
       { name: 'app-version', content: APP_VERSION },
       { name: 'cache-control', content: 'no-cache, no-store, must-revalidate' },
@@ -211,10 +180,10 @@ export default function App() {
       meta.setAttribute('content', content);
     });
     
-    // Strategy 3: Document title with timestamp
+    // Strategy 2: Document title with timestamp - VISUAL FEEDBACK
     document.title = `PPTX Translator Pro v${APP_VERSION} - ${new Date().toLocaleTimeString()}`;
     
-    // Strategy 4: URL hash to force reload
+    // Strategy 3: URL hash to force reload - EFFECTIVE
     if (!window.location.hash.includes(APP_VERSION)) {
       const newHash = `#v${APP_VERSION}`;
       if (window.location.hash !== newHash) {
@@ -223,7 +192,7 @@ export default function App() {
       }
     }
     
-    // Strategy 5: Local storage version check
+    // Strategy 4: Local storage version check - PERSISTENT
     const lastVersion = localStorage.getItem('pptx-translator-version');
     if (lastVersion !== APP_VERSION) {
       console.log('🔄 Version change detected, clearing local data');
@@ -247,7 +216,7 @@ export default function App() {
           font-size: 14px;
           box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         ">
-          ✅ Updated to v${APP_VERSION} - XLSX Workflow Fixed!
+          ✅ Updated to v${APP_VERSION} - Service Worker Fixed!
         </div>
       `;
       
@@ -258,6 +227,32 @@ export default function App() {
         }
       }, 3000);
     }
+    
+    // Strategy 5: Browser cache clearing via JavaScript - ADDITIONAL
+    if ('caches' in window) {
+      caches.keys().then((cacheNames) => {
+        const deletePromises = cacheNames.map(cacheName => {
+          console.log('🗑️ Deleting cache:', cacheName);
+          return caches.delete(cacheName);
+        });
+        
+        Promise.all(deletePromises).then(() => {
+          console.log('✅ All browser caches cleared');
+          setCacheStatus('cleared');
+        }).catch((error) => {
+          console.warn('⚠️ Some caches could not be cleared:', error);
+          setCacheStatus('partial');
+        });
+      }).catch((error) => {
+        console.warn('⚠️ Cache API not available:', error);
+        setCacheStatus('unavailable');
+      });
+    } else {
+      console.log('ℹ️ Cache API not supported');
+      setCacheStatus('unsupported');
+    }
+    
+    console.log('✅ Cache busting strategies applied without Service Worker');
   }, []);
 
   // Check API status on load with better error handling
@@ -782,21 +777,27 @@ export default function App() {
     }
   };
 
-  // Force refresh function for cache issues
+  // FIXED: Manual refresh function without Service Worker dependency
   const forceRefresh = () => {
     console.log('🔄 Force refresh requested by user');
     
-    // Clear all caches
+    // Clear all available caches
     if ('caches' in window) {
       caches.keys().then((names) => {
         names.forEach(name => {
           caches.delete(name);
         });
+        console.log('✅ Browser caches cleared');
       });
     }
     
     // Clear localStorage
     localStorage.clear();
+    console.log('✅ LocalStorage cleared');
+    
+    // Clear sessionStorage
+    sessionStorage.clear();
+    console.log('✅ SessionStorage cleared');
     
     // Force reload with cache bypass
     window.location.reload();
@@ -810,10 +811,11 @@ export default function App() {
           v{APP_VERSION}
         </Badge>
         <Badge className={`text-xs backdrop-blur-sm ${
-          cacheStatus === 'success' ? 'bg-green-800/80 text-green-300 border-green-600/50' :
-          cacheStatus === 'cleared' ? 'bg-blue-800/80 text-blue-300 border-blue-600/50' :
-          cacheStatus === 'error' ? 'bg-red-800/80 text-red-300 border-red-600/50' :
-          'bg-yellow-800/80 text-yellow-300 border-yellow-600/50'
+          cacheStatus === 'cleared' ? 'bg-green-800/80 text-green-300 border-green-600/50' :
+          cacheStatus === 'partial' ? 'bg-yellow-800/80 text-yellow-300 border-yellow-600/50' :
+          cacheStatus === 'unsupported' ? 'bg-blue-800/80 text-blue-300 border-blue-600/50' :
+          cacheStatus === 'unavailable' ? 'bg-red-800/80 text-red-300 border-red-600/50' :
+          'bg-gray-800/80 text-gray-300 border-gray-600/50'
         }`}>
           Cache: {cacheStatus}
         </Badge>
@@ -826,12 +828,13 @@ export default function App() {
         )}
       </div>
 
-      {/* Force refresh button for cache issues */}
+      {/* Force refresh button for manual cache clearing */}
       <div className="fixed bottom-4 right-4 z-50">
         <Button
           onClick={forceRefresh}
           size="sm"
           className="bg-gray-800/80 border-gray-600/50 text-gray-300 hover:bg-gray-700/80 backdrop-blur-sm"
+          title="Clear cache and refresh"
         >
           <RefreshCw className="w-3 h-3" />
         </Button>
@@ -923,7 +926,7 @@ export default function App() {
                   </Badge>
                   
                   <Badge className="bg-green-500/20 text-green-300 border-green-500/30 text-xs">
-                    ✅ XLSX Fixed
+                    ✅ SW Fixed
                   </Badge>
                 </>
               )}
@@ -1360,9 +1363,9 @@ export default function App() {
                 description: 'XLSX auto-detection with immediate visual feedback and proper state management'
               },
               {
-                icon: <RefreshCw className="w-5 h-5" />,
-                title: 'Aggressive Cache Busting',
-                description: 'Multiple cache invalidation strategies for always fresh content'
+                icon: <CheckCircle className="w-5 h-5" />,
+                title: 'Service Worker Fixed',
+                description: 'Reliable cache busting without problematic service worker dependencies'
               }
             ].map((feature, index) => (
               <div key={index} className="p-4 bg-black/40 backdrop-blur-sm border-white/10 border rounded-xl shadow-xl hover:bg-black/50 transition-all duration-300">
@@ -1383,7 +1386,7 @@ export default function App() {
                 <h3 className="text-yellow-400">Google APIs Not Configured</h3>
               </div>
               <p className="text-yellow-300 text-sm mb-3">
-                App is using REAL PPTX processing v{APP_VERSION} with fixed XLSX workflow. To enable Google Translate:
+                App is using REAL PPTX processing v{APP_VERSION} with fixed service worker. To enable Google Translate:
               </p>
               <div className="text-xs text-yellow-200 space-y-1">
                 <p>1. Go to <strong>Netlify Dashboard</strong> → Your Site → <strong>Environment Variables</strong></p>
@@ -1392,7 +1395,7 @@ export default function App() {
                 <p>4. <strong>Deploy site</strong> to activate real Google Translate</p>
               </div>
               <p className="text-yellow-300 text-sm mt-2">
-                Current REAL PPTX processing with fixed XLSX workflow works perfectly! 🚀
+                Current REAL PPTX processing with fixed caching works perfectly! 🚀
               </p>
               
               {/* Debug Info */}
@@ -1405,7 +1408,8 @@ export default function App() {
                       <li>• Version: v{APP_VERSION} ✅</li>
                       <li>• REAL PPTX Processing: ✅ Available</li>
                       <li>• XLSX Language Selection: ✅ Fixed</li>
-                      <li>• Cache Busting: ✅ Aggressive</li>
+                      <li>• Service Worker: ✅ Fixed (removed problematic SW)</li>
+                      <li>• Cache Busting: ✅ Multiple strategies</li>
                       <li>• JSZip Integration: ✅ Active</li>
                     </ul>
                     {apiStatus.availableEnvVars?.length > 0 && (
